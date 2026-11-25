@@ -99,6 +99,15 @@
       <div id="myKeysList" class="sub-text">Chưa có key nào.</div>
     </div>
 
+    <div class="card">
+      <h2>🔒 Đổi Mật Khẩu</h2>
+      <input id="oldPassInput" type="password" placeholder="Nhập mật khẩu hiện tại..." />
+      <input id="newPassInput" type="password" placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)..." />
+      <input id="confirmPassInput" type="password" placeholder="Nhập lại mật khẩu mới..." />
+      <button onclick="changePassword()">Xác Nhận Đổi Mật Khẩu</button>
+      <div id="passFeedback" class="err"></div>
+    </div>
+
     <div id="nakanPanel" class="card" style="display:none; border-color:#38bdf8;">
       <h2 style="color:#38bdf8;">🛠️ Nakan (V2 Riêng): Số Dư, Gói/Kho Key & Đơn Hàng</h2>
 
@@ -184,6 +193,7 @@
   }
 
   function focusAddMoney() {
+    if (!isNakan()) return;
     const sec = document.getElementById("secAddBalance");
     if (sec) sec.scrollIntoView({ behavior: "smooth" });
     const inp = document.getElementById("targetAccInput");
@@ -283,7 +293,7 @@
     writeJson(STORE_KEYS.USERS, usersMap);
     currentUsername = uname;
     localStorage.setItem(STORE_KEYS.SESSION, uname);
-    showBox("authFeedback", "Đăng ký tài khoản riêng cho Web 2 thành công!", true);
+    showBox("authFeedback", "Đăng ký tài khoản thành công!", true);
     enterApp();
   }
 
@@ -304,6 +314,33 @@
     currentUsername = usersMap[k].username || uname;
     localStorage.setItem(STORE_KEYS.SESSION, currentUsername);
     enterApp();
+  }
+
+  function changePassword() {
+    if (!currentUsername) return;
+    const oldP = document.getElementById("oldPassInput").value;
+    const newP = document.getElementById("newPassInput").value;
+    const confP = document.getElementById("confirmPassInput").value;
+    const k = normKey(currentUsername);
+    const u = usersMap[k] || { username: currentUsername, password: "", balance: 0 };
+
+    if (u.password && u.password !== oldP) {
+      return showBox("passFeedback", "Mật khẩu hiện tại không đúng.", false);
+    }
+    if (newP.length < 6) {
+      return showBox("passFeedback", "Mật khẩu mới phải có ít nhất 6 ký tự.", false);
+    }
+    if (newP !== confP) {
+      return showBox("passFeedback", "Nhập lại mật khẩu mới không khớp.", false);
+    }
+
+    u.password = newP;
+    usersMap[k] = u;
+    writeJson(STORE_KEYS.USERS, usersMap);
+    document.getElementById("oldPassInput").value = "";
+    document.getElementById("newPassInput").value = "";
+    document.getElementById("confirmPassInput").value = "";
+    showBox("passFeedback", "Đổi mật khẩu thành công!", true);
   }
 
   function logoutUser() {
@@ -396,6 +433,10 @@
 <script>
   const api = window.__V2_ISOLATED__;
 
+  function denyIfNotNakan() {
+    return !api.isNakan();
+  }
+
   function getStockCount(pid) {
     return api.getStockKeys().filter(function (k) { return k.productId === pid; }).length;
   }
@@ -423,6 +464,7 @@
 
   function renderAdminPkgList() {
     const box = document.getElementById("adminPkgList");
+    if (!box || denyIfNotNakan()) return;
     const pkgs = api.getPackages();
     if (pkgs.length === 0) {
       box.innerHTML = "Chưa có gói nào.";
@@ -444,6 +486,7 @@
   function renderStockKeys() {
     const box = document.getElementById("adminStockList");
     const countEl = document.getElementById("stockCountLabel");
+    if (!box || !countEl || denyIfNotNakan()) return;
     const pid = document.getElementById("adminPkgSelect").value;
     const list = api.getStockKeys().filter(function (k) { return k.productId === pid; });
     countEl.textContent = "Key đang có trong kho: " + list.length;
@@ -464,7 +507,7 @@
 
   function renderAdminOrders() {
     const box = document.getElementById("adminOrdersList");
-    if (!box || !api.isNakan()) return;
+    if (!box || denyIfNotNakan()) return;
     const list = api.getOrders();
     if (list.length === 0) {
       box.innerHTML = "Chưa có đơn hàng nào.";
@@ -494,8 +537,8 @@
     if (pkgs.length === 0) {
       api.setSelectedPkgId("");
       grid.innerHTML = "<div class='sub-text'>Chưa có gói key nào.</div>";
-      sel.innerHTML = "<option value=''>-- Chưa có gói --</option>";
-      orderSel.innerHTML = "<option value=''>-- Chọn gói --</option>";
+      if (sel) sel.innerHTML = "<option value=''>-- Chưa có gói --</option>";
+      if (orderSel) orderSel.innerHTML = "<option value=''>-- Chọn gói --</option>";
     } else {
       let curId = api.getSelectedPkgId();
       if (!curId || !pkgs.some(function (p) { return p.id === curId; })) {
@@ -514,15 +557,17 @@
         `;
       }).join("");
 
-      const oldStock = sel.value;
-      const oldOrder = orderSel.value;
-      const opts = pkgs.map(function (p) {
-        return `<option value="${p.id}">${p.name} (${p.price.toLocaleString("vi-VN")}đ - còn ${getStockCount(p.id)})</option>`;
-      }).join("");
-      sel.innerHTML = opts;
-      orderSel.innerHTML = opts;
-      if (oldStock && pkgs.some(function (p) { return p.id === oldStock; })) sel.value = oldStock;
-      if (oldOrder && pkgs.some(function (p) { return p.id === oldOrder; })) orderSel.value = oldOrder;
+      if (api.isNakan() && sel && orderSel) {
+        const oldStock = sel.value;
+        const oldOrder = orderSel.value;
+        const opts = pkgs.map(function (p) {
+          return `<option value="${p.id}">${p.name} (${p.price.toLocaleString("vi-VN")}đ - còn ${getStockCount(p.id)})</option>`;
+        }).join("");
+        sel.innerHTML = opts;
+        orderSel.innerHTML = opts;
+        if (oldStock && pkgs.some(function (p) { return p.id === oldStock; })) sel.value = oldStock;
+        if (oldOrder && pkgs.some(function (p) { return p.id === oldOrder; })) orderSel.value = oldOrder;
+      }
     }
 
     updateBuyTotal();
@@ -546,7 +591,7 @@
   }
 
   function adminAddMoney() {
-    if (!api.isNakan()) return;
+    if (denyIfNotNakan()) return;
     const rawTarget = document.getElementById("targetAccInput").value.trim();
     const amount = Number(document.getElementById("addMoneyInput").value);
     if (!rawTarget || !Number.isFinite(amount) || amount === 0) {
@@ -565,7 +610,7 @@
   }
 
   function adminClearMoney() {
-    if (!api.isNakan()) return;
+    if (denyIfNotNakan()) return;
     const rawTarget = document.getElementById("targetAccInput").value.trim();
     if (!rawTarget) return api.showBox("moneyFeedback", "Nhập tài khoản cần xóa số dư.", false);
     const u = ensureTargetUser(rawTarget);
@@ -579,7 +624,7 @@
   }
 
   function adminAddPkg() {
-    if (!api.isNakan()) return;
+    if (denyIfNotNakan()) return;
     const name = document.getElementById("newPkgName").value.trim();
     const price = Number(document.getElementById("newPkgPrice").value);
     if (!name || !price || price <= 0) return api.showBox("stockFeedback", "Nhập đủ tên gói và giá.", false);
@@ -593,7 +638,7 @@
   }
 
   function adminDeletePkg(pkgId) {
-    if (!api.isNakan() || !pkgId) return;
+    if (denyIfNotNakan() || !pkgId) return;
     const pkgs = api.getPackages();
     const pkg = pkgs.find(function (x) { return x.id === pkgId; });
     if (!confirm("Xóa gói \"" + (pkg ? pkg.name : pkgId) + "\" và key tồn kho của gói này?")) return;
@@ -605,7 +650,7 @@
   }
 
   function adminImportKeys() {
-    if (!api.isNakan()) return;
+    if (denyIfNotNakan()) return;
     const pid = document.getElementById("adminPkgSelect").value;
     const lines = document.getElementById("adminKeysInput").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
     if (!pid) return api.showBox("stockFeedback", "Hãy tạo/chọn gói trước.", false);
@@ -621,7 +666,7 @@
   }
 
   function adminDeleteKey(keyId) {
-    if (!api.isNakan() || !keyId) return;
+    if (denyIfNotNakan() || !keyId) return;
     if (!confirm("Xóa key này khỏi kho?")) return;
     api.setStockKeys(api.getStockKeys().filter(function (k) { return k.id !== keyId; }));
     api.showBox("stockFeedback", "Đã xóa key khỏi kho.", true);
@@ -629,7 +674,7 @@
   }
 
   function adminClearPkgKeys() {
-    if (!api.isNakan()) return;
+    if (denyIfNotNakan()) return;
     const pid = document.getElementById("adminPkgSelect").value;
     const all = api.getStockKeys();
     const target = all.filter(function (k) { return k.productId === pid; });
@@ -641,7 +686,7 @@
   }
 
   function adminCreateOrder() {
-    if (!api.isNakan()) return;
+    if (denyIfNotNakan()) return;
     const buyer = document.getElementById("orderBuyerInput").value.trim();
     const pid = document.getElementById("orderPkgSelect").value;
     const qty = Math.max(1, Math.floor(Number(document.getElementById("orderQtyInput").value || 1)));
@@ -690,7 +735,7 @@
   }
 
   function adminDeleteOrder(orderId) {
-    if (!api.isNakan() || !orderId) return;
+    if (denyIfNotNakan() || !orderId) return;
     if (!confirm("Xóa đơn hàng này?")) return;
     api.setOrders(api.getOrders().filter(function (o) { return o.id !== orderId; }));
     api.showBox("orderAdminFeedback", "Đã xóa đơn hàng.", true);
@@ -698,7 +743,7 @@
   }
 
   function adminClearAllOrders() {
-    if (!api.isNakan()) return;
+    if (denyIfNotNakan()) return;
     const list = api.getOrders();
     if (list.length === 0) return api.showBox("orderAdminFeedback", "Không có đơn hàng nào để xóa.", false);
     if (!confirm("Xóa toàn bộ " + list.length + " đơn hàng?")) return;
