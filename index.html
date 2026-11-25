@@ -194,14 +194,14 @@
     collection, getDocs, query, where, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-  // DÁN TOÀN BỘ firebaseConfig CỦA PROJECT FIREBASE MỚI CHO WEB 2 VÀO ĐÂY
   const firebaseConfig = {
-    apiKey: "DAN_API_KEY_MOI_CUA_WEB_2",
-    authDomain: "DAN_AUTH_DOMAIN_MOI.firebaseapp.com",
-    projectId: "DAN_PROJECT_ID_MOI",
-    storageBucket: "DAN_STORAGE_BUCKET_MOI.firebasestorage.app",
-    messagingSenderId: "DAN_SENDER_ID_MOI",
-    appId: "DAN_APP_ID_MOI"
+    apiKey: "AIzaSyA06iDqbxW5JGK3wYTKnG45BiJWvgZC5HU",
+    authDomain: "htheanh-real.firebaseapp.com",
+    projectId: "htheanh-real",
+    storageBucket: "htheanh-real.firebasestorage.app",
+    messagingSenderId: "679370583353",
+    appId: "1:679370583353:web:dbf4fea310f5e08f370ce8",
+    measurementId: "G-296WHXVZ4V"
   };
 
   const INTERNAL_DOMAIN = "htheanh.shop";
@@ -211,12 +211,17 @@
     "htheanh817@gmail.com"
   ];
 
+  const COL_USERS = "users_v2";
+  const COL_PRODUCTS = "products_v2";
+  const COL_KEYS = "keys_v2";
+  const COL_ORDERS = "orders_v2";
+
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
 
   window.__NAKAN_V2__ = {
-    db, auth,
+    db, auth, COL_USERS, COL_PRODUCTS, COL_KEYS, COL_ORDERS,
     getUser: () => currentUser,
     getUsername: () => currentUsername,
     getBalance: () => currentBalance,
@@ -303,9 +308,10 @@
     const email = toAuthEmail(raw);
     const uname = getUsername(raw, email);
     if (!email) return showBox("authFeedback", "Nhập tên tài khoản trước.", false);
+    if (pass.length < 6) return showBox("authFeedback", "Mật khẩu cần ít nhất 6 ký tự.", false);
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, pass);
-      await setDoc(doc(db, "users", cred.user.uid), {
+      await setDoc(doc(db, COL_USERS, cred.user.uid), {
         username: uname, email: email, balance: 0, createdAt: serverTimestamp()
       });
       showBox("authFeedback", "Đăng ký thành công!", true);
@@ -341,7 +347,7 @@
     document.getElementById("authBox").style.display = "none";
     document.getElementById("mainArea").style.display = "block";
 
-    const ref = doc(db, "users", user.uid);
+    const ref = doc(db, COL_USERS, user.uid);
     const snap = await getDoc(ref);
     const fallback = getUsername("", user.email);
     if (!snap.exists()) {
@@ -379,23 +385,23 @@
     }
 
     try {
-      const kSnap = await getDocs(query(collection(db, "keys"), where("productId", "==", pkg.id), where("sold", "==", false)));
+      const kSnap = await getDocs(query(collection(db, COL_KEYS), where("productId", "==", pkg.id), where("sold", "==", false)));
       const available = kSnap.docs.slice(0, qty);
       if (available.length < qty) return showBox("buyFeedback", "Không đủ key trong kho.", false);
 
       const bought = [];
       for (const kd of available) {
         bought.push(String(kd.data().code || "").trim());
-        await updateDoc(doc(db, "keys", kd.id), { sold: true, buyerId: currentUser.uid });
+        await updateDoc(doc(db, COL_KEYS, kd.id), { sold: true, buyerId: currentUser.uid });
       }
 
       currentBalance -= total;
-      await updateDoc(doc(db, "users", currentUser.uid), { balance: currentBalance });
+      await updateDoc(doc(db, COL_USERS, currentUser.uid), { balance: currentBalance });
       updateBalanceUI();
 
       const keyStr = bought.filter(Boolean).join("\n");
       const title = qty > 1 ? (pkg.name + " x" + qty) : pkg.name;
-      await addDoc(collection(db, "orders"), {
+      await addDoc(collection(db, COL_ORDERS), {
         userId: currentUser.uid,
         buyerEmail: currentUser.email || "",
         productName: title,
