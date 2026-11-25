@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NAKAN SHOP V2 - Độc Lập</title>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+    body { margin: 0; background: #090b10; color: #f8fafc; padding: 12px; }
+    .wrap { max-width: 640px; margin: 0 auto; }
+    .card { background: #131722; border: 1px solid #22283a; border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+    h2, h3 { margin: 0 0 10px; font-size: 16px; }
+    input, textarea, select, button { width: 100%; padding: 10px 12px; margin: 6px 0; border-radius: 10px; border: 1px solid #2a3146; font-size: 14px; }
+    input, textarea, select { background: #0c0f17; color: #fff; }
+    button { background: #2563eb; color: #fff; font-weight: 700; border: none; cursor: pointer; }
+    button:hover { opacity: 0.92; }
+    button.green { background: #16a34a; }
+    button.pink { background: #e11d48; }
+    button.red { background: #dc2626; }
+    button.dark { background: #1e2433; border: 1px solid #2e364d; color: #e2e8f0; }
+
+    .top-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .balance-box { font-size: 18px; font-weight: 800; color: #22c55e; }
+    .sub-text { font-size: 12px; color: #94a3b8; }
+    .plus-bal-btn { display: inline-block; width: auto; margin: 0 0 0 8px; padding: 4px 10px; font-size: 12px; border-radius: 8px; background: #16a34a; color: #fff; font-weight: 700; }
+
+    .pkg-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 10px; }
+    .pkg-tile { background: #191e2c; border: 1.5px solid #2a3146; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; }
+    .pkg-tile.selected { background: rgba(225, 29, 72, 0.16); border-color: #fb7185; }
+    .pkg-name { font-weight: 700; font-size: 13.5px; }
+    .pkg-price { color: #fb7185; font-weight: 800; font-size: 13.5px; margin-top: 4px; }
+    .pkg-stock { color: #94a3b8; font-size: 11.5px; margin-top: 2px; }
+
+    .msg { padding: 10px; border-radius: 10px; background: #14532d; color: #dcfce7; margin-top: 8px; display: none; font-size: 13px; }
+    .err { padding: 10px; border-radius: 10px; background: #7f1d1d; color: #fee2e2; margin-top: 8px; display: none; font-size: 13px; }
+    .item { background: #0c0f17; border: 1px solid #22283a; border-radius: 10px; padding: 10px 12px; margin-top: 8px; }
+    .key-box { background: #06080d; border: 1px dashed #22c55e; border-radius: 8px; padding: 10px; color: #4ade80; font-family: monospace; font-weight: 700; white-space: pre-line; word-break: break-all; margin-top: 8px; font-size: 13px; }
+    .stock-code { font-family: monospace; color: #e2e8f0; font-size: 13px; word-break: break-all; }
+
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.85); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 9999; }
+    .modal-card { width: 100%; max-width: 440px; background: #131722; border: 1px solid #4ade80; border-radius: 14px; padding: 16px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="keyModalBackdrop" class="modal-backdrop">
+    <div class="modal-card">
+      <div style="color:#4ade80; font-size:17px; font-weight:800;">🎉 Key Của Bạn</div>
+      <div id="keyModalMeta" class="sub-text" style="margin-top:4px;"></div>
+      <div id="keyModalCode" class="key-box"></div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button class="green" style="margin:0;" onclick="copyLatestKey()">📋 Copy Key</button>
+        <button class="dark" style="margin:0;" onclick="closeKeyModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="authBox" class="card">
+    <h2>⚡ Đăng nhập / Đăng ký (Web 2 Độc Lập)</h2>
+    <input id="userInput" type="text" placeholder="Nhập tên tài khoản..." />
+    <input id="passInput" type="password" placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)..." />
+    <div style="display:flex; gap:8px;">
+      <button onclick="loginUser()">Đăng nhập</button>
+      <button class="green" onclick="registerUser()">Đăng ký</button>
+    </div>
+    <div id="authFeedback" class="err"></div>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div class="card">
+      <div class="top-bar">
+        <div>
+          <div id="userLabel" style="font-weight:700; font-size:15px;">Tài khoản</div>
+          <div class="sub-text">
+            Số dư: <span id="balanceText" class="balance-box">0đ</span>
+            <button id="plusBalBtn" class="plus-bal-btn" style="display:none;" onclick="focusAddMoney()">+ số dư</button>
+          </div>
+        </div>
+        <button class="dark" style="width:auto; margin:0; padding:8px 12px;" onclick="logoutUser()">Đăng xuất</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🛒 Mua Key</h2>
+      <div id="pkgGrid" class="pkg-grid">Chưa có gói key nào.</div>
+      <div class="sub-text">Số lượng mua:</div>
+      <input id="buyQtyInput" type="number" min="1" step="1" value="1" oninput="updateBuyTotal()" />
+      <div style="display:flex; justify-content:space-between; align-items:center; margin:8px 0;">
+        <span id="buySummaryText" class="sub-text">Chưa chọn gói</span>
+        <b id="buyTotalText" style="color:#fb7185; font-size:16px;">0đ</b>
+      </div>
+      <button class="pink" onclick="buyKey()">Mua Key Ngay</button>
+      <div id="buyFeedback" class="err"></div>
+    </div>
+
+    <div class="card">
+      <h2>🔑 Key Đã Mua</h2>
+      <div id="myKeysList" class="sub-text">Chưa có key nào.</div>
+    </div>
+
+    <div id="nakanPanel" class="card" style="display:none; border-color:#38bdf8;">
+      <h2 style="color:#38bdf8;">🛠️ Nakan (Web 2): Số Dư, Gói/Kho Key & Đơn Hàng</h2>
+
+      <h3 id="secAddBalance">1. Cộng hoặc Xóa số dư</h3>
+      <input id="targetAccInput" type="text" placeholder="Tên tài khoản hoặc email cần xử lý..." />
+      <input id="addMoneyInput" type="number" step="1" placeholder="Số tiền cộng (VD: 20000)..." />
+      <div style="display:flex; gap:8px;">
+        <button class="green" style="margin:0; flex:1;" onclick="adminAddMoney()">Cộng Số Dư</button>
+        <button class="red" style="margin:0; flex:1;" onclick="adminClearMoney()">Xóa Số Dư (0đ)</button>
+      </div>
+      <div id="moneyFeedback" class="err"></div>
+
+      <h3 style="margin-top:14px;">2. Tạo/Xóa gói, Nhập & Xóa key ở kho</h3>
+      <div style="display:flex; gap:8px;">
+        <input id="newPkgName" type="text" placeholder="Tên gói mới (VD: 1 Ngày)" style="margin:0;" />
+        <input id="newPkgPrice" type="number" placeholder="Giá (VD: 5000)" style="margin:0;" />
+        <button class="green" style="width:auto; white-space:nowrap; margin:0;" onclick="adminAddPkg()">+ Gói</button>
+      </div>
+
+      <div id="adminPkgList" class="sub-text" style="margin-top:8px;">Chưa có gói nào.</div>
+
+      <select id="adminPkgSelect" style="margin-top:10px;" onchange="renderStockKeys()"></select>
+      <textarea id="adminKeysInput" rows="3" placeholder="Dán key để nhập vô kho, mỗi dòng 1 key..."></textarea>
+      <button onclick="adminImportKeys()">Nhập Key Vô Kho</button>
+      <div id="stockFeedback" class="err"></div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; gap:8px;">
+        <span id="stockCountLabel" class="sub-text">Key đang có trong kho: 0</span>
+        <button class="red" style="width:auto; margin:0; padding:6px 10px; font-size:12px;" onclick="adminClearPkgKeys()">Xóa Tất Cả Key Gói Này</button>
+      </div>
+      <div id="adminStockList" class="sub-text" style="margin-top:6px;">Chưa có key tồn kho.</div>
+
+      <h3 style="margin-top:16px;">3. Thêm đơn hàng & Xóa đơn hàng</h3>
+      <input id="orderBuyerInput" type="text" placeholder="Tài khoản hoặc email khách nhận đơn (VD: khach1)..." />
+      <select id="orderPkgSelect"></select>
+      <div style="display:flex; gap:8px;">
+        <input id="orderQtyInput" type="number" min="1" step="1" value="1" placeholder="SL (nếu tự lấy từ kho)" style="margin:0; flex:1;" />
+        <input id="orderCustomPriceInput" type="number" step="1" placeholder="Giá đơn (để trống tự tính)" style="margin:0; flex:1;" />
+      </div>
+      <textarea id="orderManualKeysInput" rows="2" placeholder="Nhập/dán key tay (để trống nếu muốn tự rút key từ kho)..."></textarea>
+      <button class="green" onclick="adminCreateOrder()">+ Thêm Đơn Hàng</button>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; gap:8px;">
+        <span class="sub-text">Danh sách đơn hàng hiện có:</span>
+        <button class="red" style="width:auto; margin:0; padding:6px 10px; font-size:12px;" onclick="adminClearAllOrders()">Xóa Tất Cả Đơn</button>
+      </div>
+      <div id="adminOrdersList" class="sub-text">Đang tải đơn hàng...</div>
+      <div id="orderAdminFeedback" class="err"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let latestKeyText = "";
+
+  function openKeyModal(title, keysText) {
+    latestKeyText = String(keysText || "").trim();
+    document.getElementById("keyModalMeta").textContent = title;
+    document.getElementById("keyModalCode").textContent = latestKeyText;
+    document.getElementById("keyModalBackdrop").style.display = "flex";
+  }
+
+  function closeKeyModal() {
+    document.getElementById("keyModalBackdrop").style.display = "none";
+  }
+
+  async function copyLatestKey() {
+    if (!latestKeyText) return;
+    try {
+      await navigator.clipboard.writeText(latestKeyText);
+      alert("Đã copy key!");
+    } catch (e) {
+      alert("Hãy giữ tay để copy mã key.");
+    }
+  }
+
+  function focusAddMoney() {
+    const sec = document.getElementById("secAddBalance");
+    if (sec) sec.scrollIntoView({ behavior: "smooth" });
+    const inp = document.getElementById("targetAccInput");
+    if (inp) inp.focus();
+  }
+</script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import {
+    getFirestore, doc, getDoc, setDoc, updateDoc, addDoc,
+    collection, getDocs, query, where, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  // DÁN TOÀN BỘ firebaseConfig CỦA PROJECT FIREBASE MỚI CHO WEB 2 VÀO ĐÂY
+  const firebaseConfig = {
+    apiKey: "DAN_API_KEY_MOI_CUA_WEB_2",
+    authDomain: "DAN_AUTH_DOMAIN_MOI.firebaseapp.com",
+    projectId: "DAN_PROJECT_ID_MOI",
+    storageBucket: "DAN_STORAGE_BUCKET_MOI.firebasestorage.app",
+    messagingSenderId: "DAN_SENDER_ID_MOI",
+    appId: "DAN_APP_ID_MOI"
+  };
+
+  const INTERNAL_DOMAIN = "htheanh.shop";
+  const NAKAN_ACCOUNTS = [
+    "nakan@" + INTERNAL_DOMAIN,
+    "nakan@gmail.com",
+    "htheanh817@gmail.com"
+  ];
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  window.__NAKAN_V2__ = {
+    db, auth,
+    getUser: () => currentUser,
+    getUsername: () => currentUsername,
+    getBalance: () => currentBalance,
+    setBalance: (v) => { currentBalance = v; updateBalanceUI(); },
+    getPackages: () => packages,
+    setPackages: (v) => { packages = v; },
+    getAvailableKeys: () => availableKeys,
+    setAvailableKeys: (v) => { availableKeys = v; },
+    getSelectedPkgId: () => selectedPkgId,
+    setSelectedPkgId: (v) => { selectedPkgId = v; },
+    isNakan, toAuthEmail, showBox, updateBalanceUI
+  };
+
+  let currentUser = null;
+  let currentUsername = "";
+  let currentBalance = 0;
+  let packages = [];
+  let availableKeys = [];
+  let selectedPkgId = "";
+
+  function isNakan() {
+    if (!currentUser) return false;
+    const em = String(currentUser.email || "").trim().toLowerCase();
+    const un = String(currentUsername || "").trim().toLowerCase();
+    return NAKAN_ACCOUNTS.includes(em) || un === "nakan";
+  }
+
+  function toAuthEmail(raw) {
+    const clean = String(raw || "")
+      .trim().toLowerCase().replace(/\s+/g, "")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9._@-]/g, "");
+    if (!clean) return "";
+    return clean.includes("@") ? clean : (clean + "@" + INTERNAL_DOMAIN);
+  }
+
+  function getUsername(raw, email) {
+    const t = String(raw || "").trim();
+    if (t) return t.includes("@") ? t.split("@")[0] : t;
+    return String(email || "user").split("@")[0];
+  }
+
+  function showBox(id, text, isOk) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = isOk ? "msg" : "err";
+    el.textContent = text;
+    el.style.display = "block";
+  }
+
+  function updateBalanceUI() {
+    document.getElementById("balanceText").textContent = currentBalance.toLocaleString("vi-VN") + "đ";
+  }
+
+  function syncNakanVisibility() {
+    const ok = isNakan();
+    document.getElementById("nakanPanel").style.display = ok ? "block" : "none";
+    document.getElementById("plusBalBtn").style.display = ok ? "inline-block" : "none";
+  }
+
+  window.updateBuyTotal = function () {
+    const pkg = packages.find(function (x) { return x.id === selectedPkgId; });
+    const qty = Math.max(1, Math.floor(Number(document.getElementById("buyQtyInput").value || 1)));
+    if (!pkg) {
+      document.getElementById("buySummaryText").textContent = "Chưa chọn gói";
+      document.getElementById("buyTotalText").textContent = "0đ";
+      return;
+    }
+    document.getElementById("buySummaryText").textContent = pkg.name + " x" + qty;
+    document.getElementById("buyTotalText").textContent = (pkg.price * qty).toLocaleString("vi-VN") + "đ";
+  };
+
+  window.selectPkg = function (id) {
+    selectedPkgId = id;
+    document.querySelectorAll(".pkg-tile").forEach(function (el) {
+      el.classList.toggle("selected", el.getAttribute("data-id") === id);
+    });
+    updateBuyTotal();
+  };
+
+  window.registerUser = async function () {
+    const raw = document.getElementById("userInput").value.trim();
+    const pass = document.getElementById("passInput").value;
+    const email = toAuthEmail(raw);
+    const uname = getUsername(raw, email);
+    if (!email) return showBox("authFeedback", "Nhập tên tài khoản trước.", false);
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      await setDoc(doc(db, "users", cred.user.uid), {
+        username: uname, email: email, balance: 0, createdAt: serverTimestamp()
+      });
+      showBox("authFeedback", "Đăng ký thành công!", true);
+    } catch (e) {
+      showBox("authFeedback", "Lỗi đăng ký: " + e.message, false);
+    }
+  };
+
+  window.loginUser = async function () {
+    const raw = document.getElementById("userInput").value.trim();
+    const pass = document.getElementById("passInput").value;
+    const email = toAuthEmail(raw);
+    if (!email) return showBox("authFeedback", "Nhập tên tài khoản trước.", false);
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (e) {
+      showBox("authFeedback", "Lỗi đăng nhập: " + e.message, false);
+    }
+  };
+
+  window.logoutUser = async function () {
+    await signOut(auth);
+    location.reload();
+  };
+
+  onAuthStateChanged(auth, async function (user) {
+    currentUser = user;
+    if (!user) {
+      document.getElementById("authBox").style.display = "block";
+      document.getElementById("mainArea").style.display = "none";
+      return;
+    }
+    document.getElementById("authBox").style.display = "none";
+    document.getElementById("mainArea").style.display = "block";
+
+    const ref = doc(db, "users", user.uid);
+    const snap = await getDoc(ref);
+    const fallback = getUsername("", user.email);
+    if (!snap.exists()) {
+      await setDoc(ref, { username: fallback, email: user.email, balance: 0 });
+      currentUsername = fallback;
+      currentBalance = 0;
+      document.getElementById("userLabel").textContent = fallback;
+    } else {
+      const d = snap.data();
+      currentUsername = d.username || fallback;
+      currentBalance = Number(d.balance || 0);
+      document.getElementById("userLabel").textContent = currentUsername;
+    }
+
+    const nakanOk = isNakan();
+    syncNakanVisibility();
+    updateBalanceUI();
+    await Promise.all([
+      window.loadPackagesV2 ? window.loadPackagesV2() : Promise.resolve(),
+      window.loadMyKeysV2 ? window.loadMyKeysV2() : Promise.resolve(),
+      nakanOk && window.loadAdminOrdersV2 ? window.loadAdminOrdersV2() : Promise.resolve()
+    ]);
+  });
+
+  window.buyKey = async function () {
+    if (!currentUser) return;
+    const pkg = packages.find(function (x) { return x.id === selectedPkgId; });
+    const qty = Math.max(1, Math.floor(Number(document.getElementById("buyQtyInput").value || 1)));
+    if (!pkg) return showBox("buyFeedback", "Chưa chọn gói key.", false);
+    if (pkg.stock < qty) return showBox("buyFeedback", "Kho chỉ còn " + pkg.stock + " key.", false);
+
+    const total = pkg.price * qty;
+    if (currentBalance < total) {
+      return showBox("buyFeedback", "Số dư không đủ (cần " + total.toLocaleString("vi-VN") + "đ).", false);
+    }
+
+    try {
+      const kSnap = await getDocs(query(collection(db, "keys"), where("productId", "==", pkg.id), where("sold", "==", false)));
+      const available = kSnap.docs.slice(0, qty);
+      if (available.length < qty) return showBox("buyFeedback", "Không đủ key trong kho.", false);
+
+      const bought = [];
+      for (const kd of available) {
+        bought.push(String(kd.data().code || "").trim());
+        await updateDoc(doc(db, "keys", kd.id), { sold: true, buyerId: currentUser.uid });
+      }
+
+      currentBalance -= total;
+      await updateDoc(doc(db, "users", currentUser.uid), { balance: currentBalance });
+      updateBalanceUI();
+
+      const keyStr = bought.filter(Boolean).join("\n");
+      const title = qty > 1 ? (pkg.name + " x" + qty) : pkg.name;
+      await addDoc(collection(db, "orders"), {
+        userId: currentUser.uid,
+        buyerEmail: currentUser.email || "",
+        productName: title,
+        price: total,
+        keyCode: keyStr,
+        createdAt: serverTimestamp()
+      });
+
+      showBox("buyFeedback", "Mua thành công " + title + "!", true);
+      await Promise.all([
+        window.loadPackagesV2(),
+        window.loadMyKeysV2(),
+        isNakan() ? window.loadAdminOrdersV2() : Promise.resolve()
+      ]);
+      openKeyModal(title, keyStr);
+    } catch (e) {
+      showBox("buyFeedback", "Lỗi mua key: " + e.message, false);
+    }
+  };
+</script>
+<script type="module">
+  import {
+    doc, updateDoc, addDoc, deleteDoc,
+    collection, getDocs, query, where, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const ctx = window.__NAKAN_V2__;
+  let adminOrdersCache = [];
+
+  async function findUserDoc(rawTarget) {
+    const clean = String(rawTarget || "").trim().toLowerCase();
+    const mapped = ctx.toAuthEmail(clean).toLowerCase();
+    const uSnap = await getDocs(collection(ctx.db, "users"));
+    let found = null;
+    uSnap.forEach(function (ud) {
+      if (found) return;
+      const d = ud.data();
+      const em = String(d.email || "").toLowerCase();
+      const un = String(d.username || "").toLowerCase();
+      if (un === clean || em === clean || (mapped && em === mapped) || ud.id.toLowerCase() === clean) {
+        found = ud;
+      }
+    });
+    return found;
+  }
+
+  window.renderStockKeys = function () {
+    const box = document.getElementById("adminStockList");
+    const countEl = document.getElementById("stockCountLabel");
+    if (!box || !countEl) return;
+    const pid = document.getElementById("adminPkgSelect").value;
+    const list = ctx.getAvailableKeys().filter(function (k) { return k.productId === pid; });
+    countEl.textContent = "Key đang có trong kho: " + list.length;
+
+    if (!pid || list.length === 0) {
+      box.innerHTML = "Chưa có key nào trong kho của gói này.";
+      return;
+    }
+    box.innerHTML = list.map(function (k) {
+      return `
+        <div class="item" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <span class="stock-code">${k.code}</span>
+          <button class="red" style="width:auto; margin:0; padding:5px 10px; font-size:12px;" onclick="adminDeleteKey('${k.id}')">Xóa</button>
+        </div>
+      `;
+    }).join("");
+  };
+
+  function renderAdminPkgList() {
+    const box = document.getElementById("adminPkgList");
+    if (!box) return;
+    const pkgs = ctx.getPackages();
+    if (pkgs.length === 0) {
+      box.innerHTML = "Chưa có gói nào.";
+      return;
+    }
+    box.innerHTML = pkgs.map(function (p) {
+      return `
+        <div class="item" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <div>
+            <b>${p.name}</b> — <span style="color:#fb7185;">${p.price.toLocaleString("vi-VN")}đ</span>
+            <div class="sub-text">Còn ${p.stock} key</div>
+          </div>
+          <button class="red" style="width:auto; margin:0; padding:5px 10px; font-size:12px;" onclick="adminDeletePkg('${p.id}')">Xóa Gói</button>
+        </div>
+      `;
+    }).join("");
+  }
+
+  window.loadPackagesV2 = async function () {
+    const [pSnap, kSnap] = await Promise.all([
+      getDocs(collection(ctx.db, "products")),
+      getDocs(query(collection(ctx.db, "keys"), where("sold", "==", false)))
+    ]);
+
+    const keysArr = [];
+    const stockMap = {};
+    kSnap.forEach(function (kd) {
+      const d = kd.data();
+      const pid = d.productId || "";
+      keysArr.push({ id: kd.id, productId: pid, code: String(d.code || "").trim() });
+      stockMap[pid] = (stockMap[pid] || 0) + 1;
+    });
+    ctx.setAvailableKeys(keysArr);
+
+    const pkgsArr = [];
+    pSnap.forEach(function (pd) {
+      const x = pd.data();
+      pkgsArr.push({
+        id: pd.id,
+        name: x.name || "Gói Key",
+        price: Number(x.price || 0),
+        stock: stockMap[pd.id] || 0
+      });
+    });
+    pkgsArr.sort(function (a, b) { return a.price - b.price; });
+    ctx.setPackages(pkgsArr);
+
+    const grid = document.getElementById("pkgGrid");
+    const sel = document.getElementById("adminPkgSelect");
+    const orderSel = document.getElementById("orderPkgSelect");
+
+    if (pkgsArr.length === 0) {
+      ctx.setSelectedPkgId("");
+      grid.innerHTML = "<div class='sub-text'>Chưa có gói key nào.</div>";
+      sel.innerHTML = "<option value=''>-- Chưa có gói --</option>";
+      orderSel.innerHTML = "<option value=''>-- Chọn gói --</option>";
+      window.updateBuyTotal();
+      window.renderStockKeys();
+      renderAdminPkgList();
+      return;
+    }
+
+    let curId = ctx.getSelectedPkgId();
+    if (!curId || !pkgsArr.some(function (p) { return p.id === curId; })) {
+      curId = pkgsArr[0].id;
+      ctx.setSelectedPkgId(curId);
+    }
+
+    grid.innerHTML = pkgsArr.map(function (p) {
+      const active = p.id === curId ? "selected" : "";
+      return `
+        <div class="pkg-tile ${active}" data-id="${p.id}" onclick="selectPkg('${p.id}')">
+          <div class="pkg-name">${p.name}</div>
+          <div class="pkg-price">${p.price.toLocaleString("vi-VN")}đ</div>
+          <div class="pkg-stock">Còn ${p.stock} key</div>
+        </div>
+      `;
+    }).join("");
+
+    const oldStockPkg = sel.value;
+    const optsHtml = pkgsArr.map(function (p) {
+      return `<option value="${p.id}">${p.name} (${p.price.toLocaleString("vi-VN")}đ - còn ${p.stock})</option>`;
+    }).join("");
+    sel.innerHTML = optsHtml;
+    if (oldStockPkg && pkgsArr.some(function (p) { return p.id === oldStockPkg; })) sel.value = oldStockPkg;
+
+    const oldOrderPkg = orderSel.value;
+    orderSel.innerHTML = optsHtml;
+    if (oldOrderPkg && pkgsArr.some(function (p) { return p.id === oldOrderPkg; })) orderSel.value = oldOrderPkg;
+
+    window.updateBuyTotal();
+    window.renderStockKeys();
+    renderAdminPkgList();
+  };
+
+  window.loadMyKeysV2 = async function () {
+    const u = ctx.getUser();
+    if (!u) return;
+    const box = document.getElementById("myKeysList");
+    const snap = await getDocs(query(collection(ctx.db, "orders"), where("userId", "==", u.uid)));
+    if (snap.empty) {
+      box.innerHTML = "Chưa có key nào.";
+      return;
+    }
+    const items = [];
+    snap.forEach(function (d) { items.push(d.data()); });
+    box.innerHTML = items.reverse().map(function (o) {
+      return `
+        <div class="item">
+          <div style="display:flex; justify-content:space-between;">
+            <b>${o.productName || "Key"}</b>
+            <span style="color:#facc15; font-weight:700;">${Number(o.price || 0).toLocaleString("vi-VN")}đ</span>
+          </div>
+          <div class="key-box">${o.keyCode || ""}</div>
+        </div>
+      `;
+    }).join("");
+  };
+
+  window.adminAddMoney = async function () {
+    if (!ctx.isNakan()) return ctx.showBox("moneyFeedback", "Chỉ tài khoản Nakan mới được cộng số dư.", false);
+    const rawTarget = document.getElementById("targetAccInput").value.trim();
+    const amount = Number(document.getElementById("addMoneyInput").value);
+    if (!rawTarget || !Number.isFinite(amount) || amount === 0) {
+      return ctx.showBox("moneyFeedback", "Nhập tài khoản và số tiền hợp lệ.", false);
+    }
+    const found = await findUserDoc(rawTarget);
+    if (!found) return ctx.showBox("moneyFeedback", "Không tìm thấy tài khoản này.", false);
+
+    const oldBal = Number(found.data().balance || 0);
+    const newBal = oldBal + amount;
+    await updateDoc(doc(ctx.db, "users", found.id), { balance: newBal });
+    if (ctx.getUser() && found.id === ctx.getUser().uid) ctx.setBalance(newBal);
+    document.getElementById("addMoneyInput").value = "";
+    ctx.showBox("moneyFeedback", "Đã cộng cho " + (found.data().username || found.data().email) + ": " + oldBal.toLocaleString("vi-VN") + "đ -> " + newBal.toLocaleString("vi-VN") + "đ", true);
+  };
+
+  window.adminClearMoney = async function () {
+    if (!ctx.isNakan()) return ctx.showBox("moneyFeedback", "Chỉ tài khoản Nakan mới được xóa số dư.", false);
+    const rawTarget = document.getElementById("targetAccInput").value.trim();
+    if (!rawTarget) return ctx.showBox("moneyFeedback", "Nhập tài khoản cần xóa số dư.", false);
+    const found = await findUserDoc(rawTarget);
+    if (!found) return ctx.showBox("moneyFeedback", "Không tìm thấy tài khoản này.", false);
+
+    const label = found.data().username || found.data().email || found.id;
+    const oldBal = Number(found.data().balance || 0);
+    if (!confirm("Xóa số dư (" + oldBal.toLocaleString("vi-VN") + "đ) của \"" + label + "\" về 0đ?")) return;
+
+    await updateDoc(doc(ctx.db, "users", found.id), { balance: 0 });
+    if (ctx.getUser() && found.id === ctx.getUser().uid) ctx.setBalance(0);
+    ctx.showBox("moneyFeedback", "Đã xóa số dư của " + label + " về 0đ.", true);
+  };
+
+  window.adminAddPkg = async function () {
+    if (!ctx.isNakan()) return ctx.showBox("stockFeedback", "Chỉ tài khoản Nakan mới được tạo gói.", false);
+    const name = document.getElementById("newPkgName").value.trim();
+    const price = Number(document.getElementById("newPkgPrice").value);
+    if (!name || !price || price <= 0) return ctx.showBox("stockFeedback", "Nhập đủ tên gói và giá.", false);
+    await addDoc(collection(ctx.db, "products"), { name, price, createdAt: serverTimestamp() });
+    document.getElementById("newPkgName").value = "";
+    document.getElementById("newPkgPrice").value = "";
+    ctx.showBox("stockFeedback", "Đã tạo gói \"" + name + "\"!", true);
+    await window.loadPackagesV2();
+  };
+
+  window.adminDeletePkg = async function (pkgId) {
+    if (!ctx.isNakan() || !pkgId) return;
+    const pkg = ctx.getPackages().find(function (x) { return x.id === pkgId; });
+    const label = pkg ? pkg.name : pkgId;
+    if (!confirm("Xóa gói \"" + label + "\" (và xóa luôn key tồn kho thuộc gói này)?")) return;
+    try {
+      const kSnap = await getDocs(query(collection(ctx.db, "keys"), where("productId", "==", pkgId)));
+      for (const kd of kSnap.docs) {
+        if (!kd.data().sold) await deleteDoc(doc(ctx.db, "keys", kd.id));
+      }
+      await deleteDoc(doc(ctx.db, "products", pkgId));
+      if (ctx.getSelectedPkgId() === pkgId) ctx.setSelectedPkgId("");
+      ctx.showBox("stockFeedback", "Đã xóa gói \"" + label + "\".", true);
+      await window.loadPackagesV2();
+    } catch (e) {
+      ctx.showBox("stockFeedback", "Lỗi xóa gói: " + e.message, false);
+    }
+  };
+
+  window.adminImportKeys = async function () {
+    if (!ctx.isNakan()) return ctx.showBox("stockFeedback", "Chỉ tài khoản Nakan mới được nhập kho.", false);
+    const pid = document.getElementById("adminPkgSelect").value;
+    const lines = document.getElementById("adminKeysInput").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!pid) return ctx.showBox("stockFeedback", "Hãy tạo/chọn gói trước.", false);
+    if (lines.length === 0) return ctx.showBox("stockFeedback", "Nhập ít nhất 1 key.", false);
+    for (const code of lines) {
+      await addDoc(collection(ctx.db, "keys"), { productId: pid, code, sold: false, createdAt: serverTimestamp() });
+    }
+    document.getElementById("adminKeysInput").value = "";
+    ctx.showBox("stockFeedback", "Đã nhập " + lines.length + " key vào kho!", true);
+    await window.loadPackagesV2();
+  };
+
+  window.adminDeleteKey = async function (keyId) {
+    if (!ctx.isNakan() || !keyId) return;
+    if (!confirm("Xóa key này khỏi kho?")) return;
+    try {
+      await deleteDoc(doc(ctx.db, "keys", keyId));
+      ctx.showBox("stockFeedback", "Đã xóa key khỏi kho.", true);
+      await window.loadPackagesV2();
+    } catch (e) {
+      ctx.showBox("stockFeedback", "Lỗi xóa key: " + e.message, false);
+    }
+  };
+
+  window.adminClearPkgKeys = async function () {
+    if (!ctx.isNakan()) return;
+    const pid = document.getElementById("adminPkgSelect").value;
+    const list = ctx.getAvailableKeys().filter(function (k) { return k.productId === pid; });
+    if (!pid || list.length === 0) return ctx.showBox("stockFeedback", "Không có key nào để xóa.", false);
+    if (!confirm("Xóa toàn bộ " + list.length + " key tồn kho của gói này?")) return;
+    try {
+      for (const k of list) await deleteDoc(doc(ctx.db, "keys", k.id));
+      ctx.showBox("stockFeedback", "Đã xóa " + list.length + " key khỏi kho.", true);
+      await window.loadPackagesV2();
+    } catch (e) {
+      ctx.showBox("stockFeedback", "Lỗi xóa key: " + e.message, false);
+    }
+  };
+
+  window.adminCreateOrder = async function () {
+    if (!ctx.isNakan()) return ctx.showBox("orderAdminFeedback", "Chỉ tài khoản Nakan mới được thêm đơn hàng.", false);
+    const rawBuyer = document.getElementById("orderBuyerInput").value.trim();
+    const pid = document.getElementById("orderPkgSelect").value;
+    const qty = Math.max(1, Math.floor(Number(document.getElementById("orderQtyInput").value || 1)));
+    const customPriceRaw = document.getElementById("orderCustomPriceInput").value.trim();
+    const manualLines = document.getElementById("orderManualKeysInput").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+
+    if (!rawBuyer) return ctx.showBox("orderAdminFeedback", "Nhập tài khoản/email khách nhận đơn.", false);
+    const pkg = ctx.getPackages().find(function (x) { return x.id === pid; });
+    if (!pkg) return ctx.showBox("orderAdminFeedback", "Hãy chọn gói key trước.", false);
+
+    try {
+      const targetUser = await findUserDoc(rawBuyer);
+      const targetUid = targetUser ? targetUser.id : ("manual:" + rawBuyer.toLowerCase());
+      const targetEmail = targetUser ? (targetUser.data().email || rawBuyer) : ctx.toAuthEmail(rawBuyer);
+
+      let finalKeys = [];
+      let orderTitle = pkg.name;
+
+      if (manualLines.length > 0) {
+        finalKeys = manualLines;
+        orderTitle = manualLines.length > 1 ? (pkg.name + " x" + manualLines.length) : pkg.name;
+      } else {
+        const kSnap = await getDocs(query(collection(ctx.db, "keys"), where("productId", "==", pkg.id), where("sold", "==", false)));
+        const available = kSnap.docs.slice(0, qty);
+        if (available.length < qty) {
+          return ctx.showBox("orderAdminFeedback", "Kho chỉ còn " + available.length + " key (cần " + qty + " hoặc nhập key tay).", false);
+        }
+        for (const kd of available) {
+          finalKeys.push(String(kd.data().code || "").trim());
+          await updateDoc(doc(ctx.db, "keys", kd.id), { sold: true, buyerId: targetUid });
+        }
+        orderTitle = qty > 1 ? (pkg.name + " x" + qty) : pkg.name;
+      }
+
+      const finalCount = Math.max(1, finalKeys.length);
+      const totalPrice = customPriceRaw !== "" ? Number(customPriceRaw) : (pkg.price * finalCount);
+      await addDoc(collection(ctx.db, "orders"), {
+        userId: targetUid,
+        buyerEmail: targetEmail,
+        productName: orderTitle,
+        price: Number.isFinite(totalPrice) ? totalPrice : 0,
+        keyCode: finalKeys.filter(Boolean).join("\n"),
+        createdAt: serverTimestamp()
+      });
+
+      document.getElementById("orderManualKeysInput").value = "";
+      document.getElementById("orderCustomPriceInput").value = "";
+      ctx.showBox("orderAdminFeedback", "Đã thêm đơn \"" + orderTitle + "\" cho " + targetEmail + "!", true);
+      await Promise.all([window.loadPackagesV2(), window.loadMyKeysV2(), window.loadAdminOrdersV2()]);
+    } catch (e) {
+      ctx.showBox("orderAdminFeedback", "Lỗi thêm đơn: " + e.message, false);
+    }
+  };
+
+  window.loadAdminOrdersV2 = async function () {
+    if (!ctx.isNakan()) return;
+    const box = document.getElementById("adminOrdersList");
+    const snap = await getDocs(collection(ctx.db, "orders"));
+    adminOrdersCache = [];
+    if (snap.empty) {
+      box.innerHTML = "Chưa có đơn hàng nào.";
+      return;
+    }
+    snap.forEach(function (d) {
+      const o = d.data();
+      adminOrdersCache.push({
+        id: d.id,
+        buyer: o.buyerEmail || o.userId || "user",
+        name: o.productName || "Key",
+        price: Number(o.price || 0)
+      });
+    });
+    box.innerHTML = adminOrdersCache.map(function (item) {
+      return `
+        <div class="item" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <div>
+            <b>${item.name}</b> — <span style="color:#facc15;">${item.price.toLocaleString("vi-VN")}đ</span>
+            <div class="sub-text">Khách: ${item.buyer}</div>
+          </div>
+          <button class="red" style="width:auto; margin:0; padding:6px 10px; font-size:12px;" onclick="adminDeleteOrder('${item.id}')">Xóa Đơn</button>
+        </div>
+      `;
+    }).join("");
+  };
+
+  window.adminDeleteOrder = async function (orderId) {
+    if (!ctx.isNakan() || !orderId) return;
+    if (!confirm("Xóa đơn hàng này?")) return;
+    try {
+      await deleteDoc(doc(ctx.db, "orders", orderId));
+      ctx.showBox("orderAdminFeedback", "Đã xóa đơn hàng.", true);
+      await Promise.all([window.loadAdminOrdersV2(), window.loadMyKeysV2()]);
+    } catch (e) {
+      ctx.showBox("orderAdminFeedback", "Lỗi xóa đơn hàng: " + e.message, false);
+    }
+  };
+
+  window.adminClearAllOrders = async function () {
+    if (!ctx.isNakan()) return;
+    if (adminOrdersCache.length === 0) return ctx.showBox("orderAdminFeedback", "Không có đơn hàng nào để xóa.", false);
+    if (!confirm("Xóa toàn bộ " + adminOrdersCache.length + " đơn hàng?")) return;
+    try {
+      for (const item of adminOrdersCache) await deleteDoc(doc(ctx.db, "orders", item.id));
+      ctx.showBox("orderAdminFeedback", "Đã xóa toàn bộ " + adminOrdersCache.length + " đơn hàng.", true);
+      await Promise.all([window.loadAdminOrdersV2(), window.loadMyKeysV2()]);
+    } catch (e) {
+      ctx.showBox("orderAdminFeedback", "Lỗi xóa đơn hàng: " + e.message, false);
+    }
+  };
+</script>
+</body>
+</html>
