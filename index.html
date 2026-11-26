@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NAKAN SHOP V2 - Riêng Biệt</title>
+  <title>NAKAN SHOP V2 - Realtime</title>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
     body { margin: 0; background: #090b10; color: #f8fafc; padding: 12px; }
@@ -43,7 +43,6 @@
 </head>
 <body>
 <div class="wrap">
-
   <div id="keyModalBackdrop" class="modal-backdrop">
     <div class="modal-card">
       <div style="color:#4ade80; font-size:17px; font-weight:800;">🎉 Key Của Bạn</div>
@@ -57,7 +56,7 @@
   </div>
 
   <div id="authBox" class="card">
-    <h2>⚡ Đăng nhập / Đăng ký (Web 2 Riêng Biệt)</h2>
+    <h2>⚡ Đăng nhập / Đăng ký (Đồng bộ Realtime)</h2>
     <input id="userInput" type="text" placeholder="Nhập tên tài khoản (VD: Nakan hoặc khach1)..." />
     <input id="passInput" type="password" placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)..." />
     <div style="display:flex; gap:8px;">
@@ -109,10 +108,10 @@
     </div>
 
     <div id="nakanPanel" class="card" style="display:none; border-color:#38bdf8;">
-      <h2 style="color:#38bdf8;">🛠️ Nakan (V2 Riêng): Số Dư, Gói/Kho Key & Đơn Hàng</h2>
+      <h2 style="color:#38bdf8;">🛠️ Nakan: Số Dư, Gói/Kho Key & Đơn Hàng</h2>
 
       <h3 id="secAddBalance">1. Cộng hoặc Xóa số dư</h3>
-      <input id="targetAccInput" type="text" placeholder="Tên tài khoản cần xử lý (VD: khach1 hoặc Nakan)..." />
+      <input id="targetAccInput" type="text" placeholder="Tên tài khoản cần xử lý (VD: khach1)..." />
       <input id="addMoneyInput" type="number" step="1" placeholder="Số tiền cộng (VD: 20000)..." />
       <div style="display:flex; gap:8px;">
         <button class="green" style="margin:0; flex:1;" onclick="adminAddMoney()">Cộng Số Dư</button>
@@ -144,10 +143,10 @@
       <input id="orderBuyerInput" type="text" placeholder="Tên tài khoản khách nhận đơn (VD: khach1)..." />
       <select id="orderPkgSelect"></select>
       <div style="display:flex; gap:8px;">
-        <input id="orderQtyInput" type="number" min="1" step="1" value="1" placeholder="SL (nếu tự lấy từ kho)" style="margin:0; flex:1;" />
+        <input id="orderQtyInput" type="number" min="1" step="1" value="1" placeholder="SL" style="margin:0; flex:1;" />
         <input id="orderCustomPriceInput" type="number" step="1" placeholder="Giá đơn (để trống tự tính)" style="margin:0; flex:1;" />
       </div>
-      <textarea id="orderManualKeysInput" rows="2" placeholder="Nhập/dán key tay (để trống nếu muốn tự rút key từ kho)..."></textarea>
+      <textarea id="orderManualKeysInput" rows="2" placeholder="Nhập/dán key tay (để trống nếu tự rút từ kho)..."></textarea>
       <button class="green" onclick="adminCreateOrder()">+ Thêm Đơn Hàng</button>
 
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; gap:8px;">
@@ -158,18 +157,50 @@
       <div id="orderAdminFeedback" class="err"></div>
     </div>
   </div>
-
 </div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script>
-  let latestKeyText = "";
-
-  const STORE_KEYS = {
-    USERS: "nakan_v2_isolated_users",
-    SESSION: "nakan_v2_isolated_session",
-    PKGS: "nakan_v2_isolated_pkgs",
-    STOCK: "nakan_v2_isolated_stock",
-    ORDERS: "nakan_v2_isolated_orders"
+  const FIREBASE_CONFIG = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
   };
+
+  firebase.initializeApp(FIREBASE_CONFIG);
+  const db = firebase.database();
+
+  const SESSION_KEY = "nakan_v2_rt_session";
+  let latestKeyText = "";
+  let selectedPkgId = "";
+
+  const state = {
+    usersMap: {},
+    currentUsername: localStorage.getItem(SESSION_KEY) || "",
+    packages: [],
+    stockKeys: [],
+    orders: []
+  };
+
+  function normKey(raw) {
+    return String(raw || "").trim().toLowerCase();
+  }
+
+  function isNakan() {
+    return normKey(state.currentUsername) === "nakan";
+  }
+
+  function showBox(id, text, isOk) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = isOk ? "msg" : "err";
+    el.textContent = text;
+    el.style.display = "block";
+  }
 
   function openKeyModal(title, keysText) {
     latestKeyText = String(keysText || "").trim();
@@ -200,143 +231,112 @@
     if (inp) inp.focus();
   }
 
-  function readJson(key, fallback) {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
-    } catch (e) {
-      return fallback;
+  let renderScheduled = false;
+  function scheduleRender() {
+    if (renderScheduled) return;
+    renderScheduled = true;
+    requestAnimationFrame(() => {
+      renderScheduled = false;
+      if (!state.currentUsername) return;
+      document.getElementById("userLabel").textContent = state.currentUsername;
+      document.getElementById("balanceText").textContent = getBalance().toLocaleString("vi-VN") + "đ";
+      document.getElementById("plusBalBtn").style.display = isNakan() ? "inline-block" : "none";
+      document.getElementById("nakanPanel").style.display = isNakan() ? "block" : "none";
+      if (window.renderShopUI) window.renderShopUI();
+    });
+  }
+
+  // Lắng nghe dữ liệu Realtime từ Firebase
+  db.ref("nakan_shop_v2/users").on("value", (snap) => {
+    state.usersMap = snap.val() || {};
+    scheduleRender();
+  });
+
+  db.ref("nakan_shop_v2/packages").on("value", (snap) => {
+    const raw = snap.val() || {};
+    state.packages = Object.values(raw).sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+    scheduleRender();
+  });
+
+  db.ref("nakan_shop_v2/stock").on("value", (snap) => {
+    state.stockKeys = Object.values(snap.val() || {});
+    scheduleRender();
+  });
+
+  db.ref("nakan_shop_v2/orders").on("value", (snap) => {
+    state.orders = Object.values(snap.val() || {}).sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+    scheduleRender();
+  });
+</script>
+<script>
+  function getBalance(uname = state.currentUsername) {
+    const u = state.usersMap[normKey(uname)];
+    return Number((u && u.balance) || 0);
+  }
+
+  async function ensureTargetUser(rawName) {
+    const clean = String(rawName || "").trim();
+    const k = normKey(clean);
+    if (!state.usersMap[k]) {
+      const userObj = { username: clean, password: "", balance: 0 };
+      state.usersMap[k] = userObj;
+      await db.ref("nakan_shop_v2/users/" + k).set(userObj);
     }
+    return state.usersMap[k];
   }
 
-  function writeJson(key, val) {
-    localStorage.setItem(key, JSON.stringify(val));
-  }
-
-  function normKey(raw) {
-    return String(raw || "").trim().toLowerCase();
-  }
-
-  let usersMap = readJson(STORE_KEYS.USERS, {});
-  let currentUsername = localStorage.getItem(STORE_KEYS.SESSION) || "";
-  let packages = readJson(STORE_KEYS.PKGS, []);
-  let stockKeys = readJson(STORE_KEYS.STOCK, []);
-  let orders = readJson(STORE_KEYS.ORDERS, []);
-  let selectedPkgId = "";
-
-  window.__V2_ISOLATED__ = {
-    STORE_KEYS,
-    readJson,
-    writeJson,
-    normKey,
-    getUsersMap: () => usersMap,
-    setUsersMap: (v) => { usersMap = v; writeJson(STORE_KEYS.USERS, v); },
-    getCurrentUsername: () => currentUsername,
-    getPackages: () => packages,
-    setPackages: (v) => { packages = v; writeJson(STORE_KEYS.PKGS, v); },
-    getStockKeys: () => stockKeys,
-    setStockKeys: (v) => { stockKeys = v; writeJson(STORE_KEYS.STOCK, v); },
-    getOrders: () => orders,
-    setOrders: (v) => { orders = v; writeJson(STORE_KEYS.ORDERS, v); },
-    getSelectedPkgId: () => selectedPkgId,
-    setSelectedPkgId: (v) => { selectedPkgId = v; },
-    isNakan,
-    showBox,
-    refreshAll
-  };
-
-  function isNakan() {
-    return normKey(currentUsername) === "nakan";
-  }
-
-  function showBox(id, text, isOk) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.className = isOk ? "msg" : "err";
-    el.textContent = text;
-    el.style.display = "block";
-  }
-
-  function getBalance() {
-    const k = normKey(currentUsername);
-    return Number((usersMap[k] && usersMap[k].balance) || 0);
-  }
-
-  function setBalance(uname, bal) {
-    const k = normKey(uname);
-    if (!usersMap[k]) {
-      usersMap[k] = { username: uname, password: "", balance: 0 };
-    }
-    usersMap[k].balance = Number(bal || 0);
-    writeJson(STORE_KEYS.USERS, usersMap);
-  }
-
-  function updateBalanceUI() {
-    document.getElementById("balanceText").textContent = getBalance().toLocaleString("vi-VN") + "đ";
-  }
-
-  function syncNakanVisibility() {
-    const ok = isNakan();
-    document.getElementById("nakanPanel").style.display = ok ? "block" : "none";
-    document.getElementById("plusBalBtn").style.display = ok ? "inline-block" : "none";
-  }
-
-  function registerUser() {
+  async function registerUser() {
     const uname = document.getElementById("userInput").value.trim();
     const pass = document.getElementById("passInput").value;
     const k = normKey(uname);
     if (!uname) return showBox("authFeedback", "Nhập tên tài khoản trước.", false);
     if (pass.length < 6) return showBox("authFeedback", "Mật khẩu tối thiểu 6 ký tự.", false);
-    if (usersMap[k]) return showBox("authFeedback", "Tài khoản này đã tồn tại trên Web 2.", false);
+    if (state.usersMap[k]) return showBox("authFeedback", "Tài khoản này đã tồn tại.", false);
 
-    usersMap[k] = { username: uname, password: pass, balance: 0 };
-    writeJson(STORE_KEYS.USERS, usersMap);
-    currentUsername = uname;
-    localStorage.setItem(STORE_KEYS.SESSION, uname);
-    showBox("authFeedback", "Đăng ký tài khoản thành công!", true);
+    const newUser = { username: uname, password: pass, balance: 0 };
+    await db.ref("nakan_shop_v2/users/" + k).set(newUser);
+    state.currentUsername = uname;
+    localStorage.setItem(SESSION_KEY, uname);
+    showBox("authFeedback", "Đăng ký thành công!", true);
     enterApp();
   }
 
-  function loginUser() {
+  async function loginUser() {
     const uname = document.getElementById("userInput").value.trim();
     const pass = document.getElementById("passInput").value;
     const k = normKey(uname);
     if (!uname) return showBox("authFeedback", "Nhập tên tài khoản trước.", false);
 
-    if (!usersMap[k]) {
+    const existing = state.usersMap[k];
+    if (!existing) {
       if (pass.length < 6) return showBox("authFeedback", "Tài khoản mới cần mật khẩu tối thiểu 6 ký tự.", false);
-      usersMap[k] = { username: uname, password: pass, balance: 0 };
-      writeJson(STORE_KEYS.USERS, usersMap);
-    } else if (usersMap[k].password && usersMap[k].password !== pass) {
-      return showBox("authFeedback", "Sai mật khẩu tài khoản này.", false);
+      const newUser = { username: uname, password: pass, balance: 0 };
+      await db.ref("nakan_shop_v2/users/" + k).set(newUser);
+      state.currentUsername = uname;
+    } else {
+      if (existing.password && existing.password !== pass) {
+        return showBox("authFeedback", "Sai mật khẩu tài khoản này.", false);
+      }
+      state.currentUsername = existing.username || uname;
     }
 
-    currentUsername = usersMap[k].username || uname;
-    localStorage.setItem(STORE_KEYS.SESSION, currentUsername);
+    localStorage.setItem(SESSION_KEY, state.currentUsername);
     enterApp();
   }
 
-  function changePassword() {
-    if (!currentUsername) return;
+  async function changePassword() {
+    if (!state.currentUsername) return;
     const oldP = document.getElementById("oldPassInput").value;
     const newP = document.getElementById("newPassInput").value;
     const confP = document.getElementById("confirmPassInput").value;
-    const k = normKey(currentUsername);
-    const u = usersMap[k] || { username: currentUsername, password: "", balance: 0 };
+    const k = normKey(state.currentUsername);
+    const u = state.usersMap[k] || { username: state.currentUsername, password: "", balance: 0 };
 
-    if (u.password && u.password !== oldP) {
-      return showBox("passFeedback", "Mật khẩu hiện tại không đúng.", false);
-    }
-    if (newP.length < 6) {
-      return showBox("passFeedback", "Mật khẩu mới phải có ít nhất 6 ký tự.", false);
-    }
-    if (newP !== confP) {
-      return showBox("passFeedback", "Nhập lại mật khẩu mới không khớp.", false);
-    }
+    if (u.password && u.password !== oldP) return showBox("passFeedback", "Mật khẩu hiện tại không đúng.", false);
+    if (newP.length < 6) return showBox("passFeedback", "Mật khẩu mới tối thiểu 6 ký tự.", false);
+    if (newP !== confP) return showBox("passFeedback", "Nhập lại mật khẩu mới không khớp.", false);
 
-    u.password = newP;
-    usersMap[k] = u;
-    writeJson(STORE_KEYS.USERS, usersMap);
+    await db.ref("nakan_shop_v2/users/" + k + "/password").set(newP);
     document.getElementById("oldPassInput").value = "";
     document.getElementById("newPassInput").value = "";
     document.getElementById("confirmPassInput").value = "";
@@ -344,14 +344,24 @@
   }
 
   function logoutUser() {
-    localStorage.removeItem(STORE_KEYS.SESSION);
-    currentUsername = "";
+    localStorage.removeItem(SESSION_KEY);
+    state.currentUsername = "";
     document.getElementById("mainArea").style.display = "none";
     document.getElementById("authBox").style.display = "block";
   }
 
+  function enterApp() {
+    document.getElementById("authBox").style.display = "none";
+    document.getElementById("mainArea").style.display = "block";
+    scheduleRender();
+  }
+
+  if (state.currentUsername) {
+    enterApp();
+  }
+
   function updateBuyTotal() {
-    const pkg = packages.find(function (x) { return x.id === selectedPkgId; });
+    const pkg = state.packages.find((x) => x.id === selectedPkgId);
     const qty = Math.max(1, Math.floor(Number(document.getElementById("buyQtyInput").value || 1)));
     if (!pkg) {
       document.getElementById("buySummaryText").textContent = "Chưa chọn gói";
@@ -359,397 +369,359 @@
       return;
     }
     document.getElementById("buySummaryText").textContent = pkg.name + " x" + qty;
-    document.getElementById("buyTotalText").textContent = (pkg.price * qty).toLocaleString("vi-VN") + "đ";
+    document.getElementById("buyTotalText").textContent = (Number(pkg.price || 0) * qty).toLocaleString("vi-VN") + "đ";
   }
 
   function selectPkg(id) {
     selectedPkgId = id;
-    document.querySelectorAll(".pkg-tile").forEach(function (el) {
+    document.querySelectorAll(".pkg-tile").forEach((el) => {
       el.classList.toggle("selected", el.getAttribute("data-id") === id);
     });
     updateBuyTotal();
   }
 
-  function buyKey() {
-    if (!currentUsername) return;
-    const pkg = packages.find(function (x) { return x.id === selectedPkgId; });
+  async function buyKey() {
+    if (!state.currentUsername) return;
+    const pkg = state.packages.find((x) => x.id === selectedPkgId);
     const qty = Math.max(1, Math.floor(Number(document.getElementById("buyQtyInput").value || 1)));
     if (!pkg) return showBox("buyFeedback", "Chưa chọn gói key.", false);
 
-    const available = stockKeys.filter(function (k) { return k.productId === pkg.id; });
+    const available = state.stockKeys.filter((k) => k.productId === pkg.id);
     if (available.length < qty) return showBox("buyFeedback", "Kho chỉ còn " + available.length + " key.", false);
 
-    const total = pkg.price * qty;
-    const bal = getBalance();
-    if (bal < total) return showBox("buyFeedback", "Số dư không đủ (cần " + total.toLocaleString("vi-VN") + "đ).", false);
+    const total = Number(pkg.price || 0) * qty;
+    const uKey = normKey(state.currentUsername);
+
+    const txResult = await db.ref("nakan_shop_v2/users/" + uKey + "/balance").transaction((curr) => {
+      const bal = Number(curr || 0);
+      if (bal < total) return;
+      return bal - total;
+    });
+
+    if (!txResult.committed) {
+      return showBox("buyFeedback", "Số dư không đủ (cần " + total.toLocaleString("vi-VN") + "đ).", false);
+    }
 
     const picked = available.slice(0, qty);
-    const pickedIds = picked.map(function (x) { return x.id; });
-    const boughtCodes = picked.map(function (x) { return x.code; });
+    const updates = {};
+    picked.forEach((item) => {
+      updates["nakan_shop_v2/stock/" + item.id] = null;
+    });
 
-    stockKeys = stockKeys.filter(function (k) { return !pickedIds.includes(k.id); });
-    writeJson(STORE_KEYS.STOCK, stockKeys);
-    setBalance(currentUsername, bal - total);
-
-    const keyStr = boughtCodes.join("\n");
+    const ordId = "ord_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
     const title = qty > 1 ? (pkg.name + " x" + qty) : pkg.name;
-    orders.push({
-      id: "ord_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
-      buyer: currentUsername,
+    const keyStr = picked.map((x) => x.code).join("\n");
+
+    updates["nakan_shop_v2/orders/" + ordId] = {
+      id: ordId,
+      buyer: state.currentUsername,
       productName: title,
       price: total,
       keyCode: keyStr,
       createdAt: Date.now()
-    });
-    writeJson(STORE_KEYS.ORDERS, orders);
+    };
 
+    await db.ref().update(updates);
     showBox("buyFeedback", "Mua thành công " + title + "!", true);
-    refreshAll();
     openKeyModal(title, keyStr);
   }
 
-  function refreshAll() {
-    document.getElementById("userLabel").textContent = currentUsername;
-    updateBalanceUI();
-    syncNakanVisibility();
-    if (window.renderShopUI) window.renderShopUI();
-  }
-
-  function enterApp() {
-    document.getElementById("authBox").style.display = "none";
-    document.getElementById("mainArea").style.display = "block";
-    refreshAll();
-  }
-
-  if (currentUsername) {
-    const k = normKey(currentUsername);
-    if (!usersMap[k]) {
-      usersMap[k] = { username: currentUsername, password: "", balance: 0 };
-      writeJson(STORE_KEYS.USERS, usersMap);
+  async function adminAddMoney() {
+    if (!isNakan()) return;
+    const rawTarget = document.getElementById("targetAccInput").value.trim();
+    const amount = Number(document.getElementById("addMoneyInput").value);
+    if (!rawTarget || !Number.isFinite(amount) || amount === 0) {
+      return showBox("moneyFeedback", "Nhập tài khoản và số tiền hợp lệ.", false);
     }
-    enterApp();
+
+    const targetUser = await ensureTargetUser(rawTarget);
+    const k = normKey(rawTarget);
+    const oldBal = Number(targetUser.balance || 0);
+
+    const res = await db.ref("nakan_shop_v2/users/" + k + "/balance").transaction((curr) => {
+      return Number(curr || 0) + amount;
+    });
+
+    const newBal = res.snapshot ? Number(res.snapshot.val() || 0) : (oldBal + amount);
+    document.getElementById("addMoneyInput").value = "";
+    showBox("moneyFeedback", "Đã cộng cho " + targetUser.username + ": " + oldBal.toLocaleString("vi-VN") + "đ -> " + newBal.toLocaleString("vi-VN") + "đ", true);
+  }
+
+  async function adminClearMoney() {
+    if (!isNakan()) return;
+    const rawTarget = document.getElementById("targetAccInput").value.trim();
+    if (!rawTarget) return showBox("moneyFeedback", "Nhập tài khoản cần xóa số dư.", false);
+
+    const targetUser = await ensureTargetUser(rawTarget);
+    if (!confirm('Xóa số dư của "' + targetUser.username + '" về 0đ?')) return;
+
+    await db.ref("nakan_shop_v2/users/" + normKey(rawTarget) + "/balance").set(0);
+    showBox("moneyFeedback", "Đã xóa số dư của " + targetUser.username + " về 0đ.", true);
   }
 </script>
 <script>
-  const api = window.__V2_ISOLATED__;
-
-  function denyIfNotNakan() {
-    return !api.isNakan();
-  }
-
   function getStockCount(pid) {
-    return api.getStockKeys().filter(function (k) { return k.productId === pid; }).length;
+    return state.stockKeys.filter((k) => k.productId === pid).length;
   }
 
   function renderMyKeys() {
     const box = document.getElementById("myKeysList");
-    const uKey = api.normKey(api.getCurrentUsername());
-    const mine = api.getOrders().filter(function (o) { return api.normKey(o.buyer) === uKey; });
+    const uKey = normKey(state.currentUsername);
+    const mine = state.orders.filter((o) => normKey(o.buyer) === uKey);
     if (mine.length === 0) {
       box.innerHTML = "Chưa có key nào.";
       return;
     }
-    box.innerHTML = mine.slice().reverse().map(function (o) {
-      return `
-        <div class="item">
-          <div style="display:flex; justify-content:space-between;">
-            <b>${o.productName}</b>
-            <span style="color:#facc15; font-weight:700;">${Number(o.price || 0).toLocaleString("vi-VN")}đ</span>
-          </div>
-          <div class="key-box">${o.keyCode || ""}</div>
+    box.innerHTML = mine.slice().reverse().map((o) => `
+      <div class="item">
+        <div style="display:flex; justify-content:space-between;">
+          <b>${o.productName}</b>
+          <span style="color:#facc15; font-weight:700;">${Number(o.price || 0).toLocaleString("vi-VN")}đ</span>
         </div>
-      `;
-    }).join("");
+        <div class="key-box">${o.keyCode || ""}</div>
+      </div>
+    `).join("");
   }
 
   function renderAdminPkgList() {
     const box = document.getElementById("adminPkgList");
-    if (!box || denyIfNotNakan()) return;
-    const pkgs = api.getPackages();
-    if (pkgs.length === 0) {
+    if (!box || !isNakan()) return;
+    if (state.packages.length === 0) {
       box.innerHTML = "Chưa có gói nào.";
       return;
     }
-    box.innerHTML = pkgs.map(function (p) {
-      return `
-        <div class="item" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-          <div>
-            <b>${p.name}</b> — <span style="color:#fb7185;">${p.price.toLocaleString("vi-VN")}đ</span>
-            <div class="sub-text">Còn ${getStockCount(p.id)} key</div>
-          </div>
-          <button class="red" style="width:auto; margin:0; padding:5px 10px; font-size:12px;" onclick="adminDeletePkg('${p.id}')">Xóa Gói</button>
+    box.innerHTML = state.packages.map((p) => `
+      <div class="item" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div>
+          <b>${p.name}</b> — <span style="color:#fb7185;">${Number(p.price || 0).toLocaleString("vi-VN")}đ</span>
+          <div class="sub-text">Còn ${getStockCount(p.id)} key</div>
         </div>
-      `;
-    }).join("");
+        <button class="red" style="width:auto; margin:0; padding:5px 10px; font-size:12px;" onclick="adminDeletePkg('${p.id}')">Xóa Gói</button>
+      </div>
+    `).join("");
   }
 
   function renderStockKeys() {
     const box = document.getElementById("adminStockList");
     const countEl = document.getElementById("stockCountLabel");
-    if (!box || !countEl || denyIfNotNakan()) return;
+    if (!box || !countEl || !isNakan()) return;
     const pid = document.getElementById("adminPkgSelect").value;
-    const list = api.getStockKeys().filter(function (k) { return k.productId === pid; });
+    const list = state.stockKeys.filter((k) => k.productId === pid);
     countEl.textContent = "Key đang có trong kho: " + list.length;
 
     if (!pid || list.length === 0) {
       box.innerHTML = "Chưa có key nào trong kho của gói này.";
       return;
     }
-    box.innerHTML = list.map(function (k) {
-      return `
-        <div class="item" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-          <span class="stock-code">${k.code}</span>
-          <button class="red" style="width:auto; margin:0; padding:5px 10px; font-size:12px;" onclick="adminDeleteKey('${k.id}')">Xóa</button>
-        </div>
-      `;
-    }).join("");
+    box.innerHTML = list.map((k) => `
+      <div class="item" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <span class="stock-code">${k.code}</span>
+        <button class="red" style="width:auto; margin:0; padding:5px 10px; font-size:12px;" onclick="adminDeleteKey('${k.id}')">Xóa</button>
+      </div>
+    `).join("");
   }
 
   function renderAdminOrders() {
     const box = document.getElementById("adminOrdersList");
-    if (!box || denyIfNotNakan()) return;
-    const list = api.getOrders();
-    if (list.length === 0) {
+    if (!box || !isNakan()) return;
+    if (state.orders.length === 0) {
       box.innerHTML = "Chưa có đơn hàng nào.";
       return;
     }
-    box.innerHTML = list.slice().reverse().map(function (item) {
-      return `
-        <div class="item" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-          <div>
-            <b>${item.productName}</b> — <span style="color:#facc15;">${Number(item.price || 0).toLocaleString("vi-VN")}đ</span>
-            <div class="sub-text">Khách: ${item.buyer}</div>
-          </div>
-          <button class="red" style="width:auto; margin:0; padding:6px 10px; font-size:12px;" onclick="adminDeleteOrder('${item.id}')">Xóa Đơn</button>
+    box.innerHTML = state.orders.slice().reverse().map((item) => `
+      <div class="item" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div>
+          <b>${item.productName}</b> — <span style="color:#facc15;">${Number(item.price || 0).toLocaleString("vi-VN")}đ</span>
+          <div class="sub-text">Khách: ${item.buyer}</div>
         </div>
-      `;
-    }).join("");
+        <button class="red" style="width:auto; margin:0; padding:6px 10px; font-size:12px;" onclick="adminDeleteOrder('${item.id}')">Xóa Đơn</button>
+      </div>
+    `).join("");
   }
 
   window.renderShopUI = function () {
-    const pkgs = api.getPackages().slice().sort(function (a, b) { return a.price - b.price; });
-    api.setPackages(pkgs);
-
+    const pkgs = state.packages;
     const grid = document.getElementById("pkgGrid");
     const sel = document.getElementById("adminPkgSelect");
     const orderSel = document.getElementById("orderPkgSelect");
 
     if (pkgs.length === 0) {
-      api.setSelectedPkgId("");
+      selectedPkgId = "";
       grid.innerHTML = "<div class='sub-text'>Chưa có gói key nào.</div>";
       if (sel) sel.innerHTML = "<option value=''>-- Chưa có gói --</option>";
       if (orderSel) orderSel.innerHTML = "<option value=''>-- Chọn gói --</option>";
     } else {
-      let curId = api.getSelectedPkgId();
-      if (!curId || !pkgs.some(function (p) { return p.id === curId; })) {
-        curId = pkgs[0].id;
-        api.setSelectedPkgId(curId);
+      if (!selectedPkgId || !pkgs.some((p) => p.id === selectedPkgId)) {
+        selectedPkgId = pkgs[0].id;
       }
 
-      grid.innerHTML = pkgs.map(function (p) {
-        const active = p.id === curId ? "selected" : "";
+      grid.innerHTML = pkgs.map((p) => {
+        const active = p.id === selectedPkgId ? "selected" : "";
         return `
           <div class="pkg-tile ${active}" data-id="${p.id}" onclick="selectPkg('${p.id}')">
             <div class="pkg-name">${p.name}</div>
-            <div class="pkg-price">${p.price.toLocaleString("vi-VN")}đ</div>
+            <div class="pkg-price">${Number(p.price || 0).toLocaleString("vi-VN")}đ</div>
             <div class="pkg-stock">Còn ${getStockCount(p.id)} key</div>
           </div>
         `;
       }).join("");
 
-      if (api.isNakan() && sel && orderSel) {
+      if (isNakan() && sel && orderSel) {
         const oldStock = sel.value;
         const oldOrder = orderSel.value;
-        const opts = pkgs.map(function (p) {
-          return `<option value="${p.id}">${p.name} (${p.price.toLocaleString("vi-VN")}đ - còn ${getStockCount(p.id)})</option>`;
-        }).join("");
+        const opts = pkgs.map((p) =>
+          `<option value="${p.id}">${p.name} (${Number(p.price || 0).toLocaleString("vi-VN")}đ - còn ${getStockCount(p.id)})</option>`
+        ).join("");
         sel.innerHTML = opts;
         orderSel.innerHTML = opts;
-        if (oldStock && pkgs.some(function (p) { return p.id === oldStock; })) sel.value = oldStock;
-        if (oldOrder && pkgs.some(function (p) { return p.id === oldOrder; })) orderSel.value = oldOrder;
+        if (oldStock && pkgs.some((p) => p.id === oldStock)) sel.value = oldStock;
+        if (oldOrder && pkgs.some((p) => p.id === oldOrder)) orderSel.value = oldOrder;
       }
     }
 
     updateBuyTotal();
     renderMyKeys();
-    if (api.isNakan()) {
+    if (isNakan()) {
       renderAdminPkgList();
       renderStockKeys();
       renderAdminOrders();
     }
   };
 
-  function ensureTargetUser(rawName) {
-    const clean = String(rawName || "").trim();
-    const k = api.normKey(clean);
-    const map = api.getUsersMap();
-    if (!map[k]) {
-      map[k] = { username: clean, password: "", balance: 0 };
-      api.setUsersMap(map);
-    }
-    return map[k];
-  }
-
-  function adminAddMoney() {
-    if (denyIfNotNakan()) return;
-    const rawTarget = document.getElementById("targetAccInput").value.trim();
-    const amount = Number(document.getElementById("addMoneyInput").value);
-    if (!rawTarget || !Number.isFinite(amount) || amount === 0) {
-      return api.showBox("moneyFeedback", "Nhập tài khoản và số tiền hợp lệ.", false);
-    }
-    const u = ensureTargetUser(rawTarget);
-    const oldBal = Number(u.balance || 0);
-    const newBal = oldBal + amount;
-    u.balance = newBal;
-    const map = api.getUsersMap();
-    map[api.normKey(rawTarget)] = u;
-    api.setUsersMap(map);
-    document.getElementById("addMoneyInput").value = "";
-    api.showBox("moneyFeedback", "Đã cộng cho " + u.username + ": " + oldBal.toLocaleString("vi-VN") + "đ -> " + newBal.toLocaleString("vi-VN") + "đ", true);
-    api.refreshAll();
-  }
-
-  function adminClearMoney() {
-    if (denyIfNotNakan()) return;
-    const rawTarget = document.getElementById("targetAccInput").value.trim();
-    if (!rawTarget) return api.showBox("moneyFeedback", "Nhập tài khoản cần xóa số dư.", false);
-    const u = ensureTargetUser(rawTarget);
-    if (!confirm("Xóa số dư của \"" + u.username + "\" về 0đ?")) return;
-    u.balance = 0;
-    const map = api.getUsersMap();
-    map[api.normKey(rawTarget)] = u;
-    api.setUsersMap(map);
-    api.showBox("moneyFeedback", "Đã xóa số dư của " + u.username + " về 0đ.", true);
-    api.refreshAll();
-  }
-
-  function adminAddPkg() {
-    if (denyIfNotNakan()) return;
+  async function adminAddPkg() {
+    if (!isNakan()) return;
     const name = document.getElementById("newPkgName").value.trim();
     const price = Number(document.getElementById("newPkgPrice").value);
-    if (!name || !price || price <= 0) return api.showBox("stockFeedback", "Nhập đủ tên gói và giá.", false);
-    const pkgs = api.getPackages();
-    pkgs.push({ id: "pkg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), name, price });
-    api.setPackages(pkgs);
+    if (!name || !price || price <= 0) return showBox("stockFeedback", "Nhập đủ tên gói và giá.", false);
+
+    const id = "pkg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+    await db.ref("nakan_shop_v2/packages/" + id).set({ id, name, price });
     document.getElementById("newPkgName").value = "";
     document.getElementById("newPkgPrice").value = "";
-    api.showBox("stockFeedback", "Đã tạo gói \"" + name + "\"!", true);
-    api.refreshAll();
+    showBox("stockFeedback", 'Đã tạo gói "' + name + '"!', true);
   }
 
-  function adminDeletePkg(pkgId) {
-    if (denyIfNotNakan() || !pkgId) return;
-    const pkgs = api.getPackages();
-    const pkg = pkgs.find(function (x) { return x.id === pkgId; });
-    if (!confirm("Xóa gói \"" + (pkg ? pkg.name : pkgId) + "\" và key tồn kho của gói này?")) return;
-    api.setPackages(pkgs.filter(function (x) { return x.id !== pkgId; }));
-    api.setStockKeys(api.getStockKeys().filter(function (k) { return k.productId !== pkgId; }));
-    if (api.getSelectedPkgId() === pkgId) api.setSelectedPkgId("");
-    api.showBox("stockFeedback", "Đã xóa gói.", true);
-    api.refreshAll();
+  async function adminDeletePkg(pkgId) {
+    if (!isNakan() || !pkgId) return;
+    const pkg = state.packages.find((x) => x.id === pkgId);
+    if (!confirm('Xóa gói "' + (pkg ? pkg.name : pkgId) + '" và key tồn kho của gói này?')) return;
+
+    const updates = { ["nakan_shop_v2/packages/" + pkgId]: null };
+    state.stockKeys
+      .filter((k) => k.productId === pkgId)
+      .forEach((k) => { updates["nakan_shop_v2/stock/" + k.id] = null; });
+
+    if (selectedPkgId === pkgId) selectedPkgId = "";
+    await db.ref().update(updates);
+    showBox("stockFeedback", "Đã xóa gói.", true);
   }
 
-  function adminImportKeys() {
-    if (denyIfNotNakan()) return;
+  async function adminImportKeys() {
+    if (!isNakan()) return;
     const pid = document.getElementById("adminPkgSelect").value;
-    const lines = document.getElementById("adminKeysInput").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
-    if (!pid) return api.showBox("stockFeedback", "Hãy tạo/chọn gói trước.", false);
-    if (lines.length === 0) return api.showBox("stockFeedback", "Nhập ít nhất 1 key.", false);
-    const list = api.getStockKeys();
-    lines.forEach(function (code, idx) {
-      list.push({ id: "key_" + Date.now() + "_" + idx + "_" + Math.random().toString(36).slice(2, 5), productId: pid, code });
+    const lines = document.getElementById("adminKeysInput").value
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!pid) return showBox("stockFeedback", "Hãy tạo/chọn gói trước.", false);
+    if (lines.length === 0) return showBox("stockFeedback", "Nhập ít nhất 1 key.", false);
+
+    const updates = {};
+    lines.forEach((code, idx) => {
+      const keyId = "key_" + Date.now() + "_" + idx + "_" + Math.random().toString(36).slice(2, 5);
+      updates["nakan_shop_v2/stock/" + keyId] = { id: keyId, productId: pid, code };
     });
-    api.setStockKeys(list);
+
+    await db.ref().update(updates);
     document.getElementById("adminKeysInput").value = "";
-    api.showBox("stockFeedback", "Đã nhập " + lines.length + " key vào kho!", true);
-    api.refreshAll();
+    showBox("stockFeedback", "Đã nhập " + lines.length + " key vào kho!", true);
   }
 
-  function adminDeleteKey(keyId) {
-    if (denyIfNotNakan() || !keyId) return;
+  async function adminDeleteKey(keyId) {
+    if (!isNakan() || !keyId) return;
     if (!confirm("Xóa key này khỏi kho?")) return;
-    api.setStockKeys(api.getStockKeys().filter(function (k) { return k.id !== keyId; }));
-    api.showBox("stockFeedback", "Đã xóa key khỏi kho.", true);
-    api.refreshAll();
+    await db.ref("nakan_shop_v2/stock/" + keyId).remove();
+    showBox("stockFeedback", "Đã xóa key khỏi kho.", true);
   }
 
-  function adminClearPkgKeys() {
-    if (denyIfNotNakan()) return;
+  async function adminClearPkgKeys() {
+    if (!isNakan()) return;
     const pid = document.getElementById("adminPkgSelect").value;
-    const all = api.getStockKeys();
-    const target = all.filter(function (k) { return k.productId === pid; });
-    if (!pid || target.length === 0) return api.showBox("stockFeedback", "Không có key nào để xóa.", false);
+    const target = state.stockKeys.filter((k) => k.productId === pid);
+    if (!pid || target.length === 0) return showBox("stockFeedback", "Không có key nào để xóa.", false);
     if (!confirm("Xóa toàn bộ " + target.length + " key tồn kho của gói này?")) return;
-    api.setStockKeys(all.filter(function (k) { return k.productId !== pid; }));
-    api.showBox("stockFeedback", "Đã xóa " + target.length + " key khỏi kho.", true);
-    api.refreshAll();
+
+    const updates = {};
+    target.forEach((k) => { updates["nakan_shop_v2/stock/" + k.id] = null; });
+    await db.ref().update(updates);
+    showBox("stockFeedback", "Đã xóa " + target.length + " key khỏi kho.", true);
   }
 
-  function adminCreateOrder() {
-    if (denyIfNotNakan()) return;
+  async function adminCreateOrder() {
+    if (!isNakan()) return;
     const buyer = document.getElementById("orderBuyerInput").value.trim();
     const pid = document.getElementById("orderPkgSelect").value;
     const qty = Math.max(1, Math.floor(Number(document.getElementById("orderQtyInput").value || 1)));
     const customPriceRaw = document.getElementById("orderCustomPriceInput").value.trim();
-    const manualLines = document.getElementById("orderManualKeysInput").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+    const manualLines = document.getElementById("orderManualKeysInput").value
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
 
-    if (!buyer) return api.showBox("orderAdminFeedback", "Nhập tài khoản khách nhận đơn.", false);
-    const pkg = api.getPackages().find(function (x) { return x.id === pid; });
-    if (!pkg) return api.showBox("orderAdminFeedback", "Hãy chọn gói key trước.", false);
+    if (!buyer) return showBox("orderAdminFeedback", "Nhập tài khoản khách nhận đơn.", false);
+    const pkg = state.packages.find((x) => x.id === pid);
+    if (!pkg) return showBox("orderAdminFeedback", "Hãy chọn gói key trước.", false);
 
-    ensureTargetUser(buyer);
+    await ensureTargetUser(buyer);
     let finalKeys = [];
     let title = pkg.name;
+    const updates = {};
 
     if (manualLines.length > 0) {
       finalKeys = manualLines;
       title = manualLines.length > 1 ? (pkg.name + " x" + manualLines.length) : pkg.name;
     } else {
-      const avail = api.getStockKeys().filter(function (k) { return k.productId === pid; });
+      const avail = state.stockKeys.filter((k) => k.productId === pid);
       if (avail.length < qty) {
-        return api.showBox("orderAdminFeedback", "Kho chỉ còn " + avail.length + " key (cần " + qty + " hoặc nhập key tay).", false);
+        return showBox("orderAdminFeedback", "Kho chỉ còn " + avail.length + " key (cần " + qty + " hoặc nhập key tay).", false);
       }
       const picked = avail.slice(0, qty);
-      const pickedIds = picked.map(function (x) { return x.id; });
-      finalKeys = picked.map(function (x) { return x.code; });
-      api.setStockKeys(api.getStockKeys().filter(function (k) { return !pickedIds.includes(k.id); }));
+      finalKeys = picked.map((x) => x.code);
+      picked.forEach((x) => { updates["nakan_shop_v2/stock/" + x.id] = null; });
       title = qty > 1 ? (pkg.name + " x" + qty) : pkg.name;
     }
 
-    const totalPrice = customPriceRaw !== "" ? Number(customPriceRaw) : (pkg.price * Math.max(1, finalKeys.length));
-    const list = api.getOrders();
-    list.push({
-      id: "ord_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+    const totalPrice = customPriceRaw !== "" ? Number(customPriceRaw) : (Number(pkg.price || 0) * Math.max(1, finalKeys.length));
+    const ordId = "ord_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+
+    updates["nakan_shop_v2/orders/" + ordId] = {
+      id: ordId,
       buyer,
       productName: title,
       price: Number.isFinite(totalPrice) ? totalPrice : 0,
       keyCode: finalKeys.join("\n"),
       createdAt: Date.now()
-    });
-    api.setOrders(list);
+    };
 
+    await db.ref().update(updates);
     document.getElementById("orderManualKeysInput").value = "";
     document.getElementById("orderCustomPriceInput").value = "";
-    api.showBox("orderAdminFeedback", "Đã thêm đơn \"" + title + "\" cho " + buyer + "!", true);
-    api.refreshAll();
+    showBox("orderAdminFeedback", 'Đã thêm đơn "' + title + '" cho ' + buyer + "!", true);
   }
 
-  function adminDeleteOrder(orderId) {
-    if (denyIfNotNakan() || !orderId) return;
+  async function adminDeleteOrder(orderId) {
+    if (!isNakan() || !orderId) return;
     if (!confirm("Xóa đơn hàng này?")) return;
-    api.setOrders(api.getOrders().filter(function (o) { return o.id !== orderId; }));
-    api.showBox("orderAdminFeedback", "Đã xóa đơn hàng.", true);
-    api.refreshAll();
+    await db.ref("nakan_shop_v2/orders/" + orderId).remove();
+    showBox("orderAdminFeedback", "Đã xóa đơn hàng.", true);
   }
 
-  function adminClearAllOrders() {
-    if (denyIfNotNakan()) return;
-    const list = api.getOrders();
-    if (list.length === 0) return api.showBox("orderAdminFeedback", "Không có đơn hàng nào để xóa.", false);
-    if (!confirm("Xóa toàn bộ " + list.length + " đơn hàng?")) return;
-    api.setOrders([]);
-    api.showBox("orderAdminFeedback", "Đã xóa toàn bộ đơn hàng.", true);
-    api.refreshAll();
+  async function adminClearAllOrders() {
+    if (!isNakan()) return;
+    if (state.orders.length === 0) return showBox("orderAdminFeedback", "Không có đơn hàng nào để xóa.", false);
+    if (!confirm("Xóa toàn bộ " + state.orders.length + " đơn hàng?")) return;
+    await db.ref("nakan_shop_v2/orders").remove();
+    showBox("orderAdminFeedback", "Đã xóa toàn bộ đơn hàng.", true);
   }
 </script>
 </body>
