@@ -187,7 +187,10 @@
   };
 
   function normKey(raw) {
-    return String(raw || "").trim().toLowerCase();
+    return String(raw || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[.#$\[\]]/g, "_");
   }
 
   function isNakan() {
@@ -246,10 +249,11 @@
     });
   }
 
-  // Lắng nghe dữ liệu Realtime từ Firebase
   db.ref("nakan_shop_v2/users").on("value", (snap) => {
     state.usersMap = snap.val() || {};
     scheduleRender();
+  }, (err) => {
+    showBox("authFeedback", "Lỗi đọc dữ liệu users: " + err.message, false);
   });
 
   db.ref("nakan_shop_v2/packages").on("value", (snap) => {
@@ -289,39 +293,56 @@
     const uname = document.getElementById("userInput").value.trim();
     const pass = document.getElementById("passInput").value;
     const k = normKey(uname);
-    if (!uname) return showBox("authFeedback", "Nhập tên tài khoản trước.", false);
+    if (!k) return showBox("authFeedback", "Nhập tên tài khoản hợp lệ trước.", false);
     if (pass.length < 6) return showBox("authFeedback", "Mật khẩu tối thiểu 6 ký tự.", false);
-    if (state.usersMap[k]) return showBox("authFeedback", "Tài khoản này đã tồn tại.", false);
 
-    const newUser = { username: uname, password: pass, balance: 0 };
-    await db.ref("nakan_shop_v2/users/" + k).set(newUser);
-    state.currentUsername = uname;
-    localStorage.setItem(SESSION_KEY, uname);
-    showBox("authFeedback", "Đăng ký thành công!", true);
-    enterApp();
+    try {
+      const snap = await db.ref("nakan_shop_v2/users/" + k).get();
+      if (snap.exists()) {
+        return showBox("authFeedback", "Tài khoản này đã tồn tại.", false);
+      }
+      const newUser = { username: uname, password: pass, balance: 0 };
+      await db.ref("nakan_shop_v2/users/" + k).set(newUser);
+      state.usersMap[k] = newUser;
+      state.currentUsername = uname;
+      localStorage.setItem(SESSION_KEY, uname);
+      showBox("authFeedback", "Đăng ký thành công!", true);
+      enterApp();
+    } catch (e) {
+      showBox("authFeedback", "Lỗi đăng ký: " + (e && e.message ? e.message : e), false);
+    }
   }
 
   async function loginUser() {
     const uname = document.getElementById("userInput").value.trim();
     const pass = document.getElementById("passInput").value;
     const k = normKey(uname);
-    if (!uname) return showBox("authFeedback", "Nhập tên tài khoản trước.", false);
+    if (!k) return showBox("authFeedback", "Nhập tên tài khoản hợp lệ trước.", false);
 
-    const existing = state.usersMap[k];
-    if (!existing) {
-      if (pass.length < 6) return showBox("authFeedback", "Tài khoản mới cần mật khẩu tối thiểu 6 ký tự.", false);
-      const newUser = { username: uname, password: pass, balance: 0 };
-      await db.ref("nakan_shop_v2/users/" + k).set(newUser);
-      state.currentUsername = uname;
-    } else {
-      if (existing.password && existing.password !== pass) {
-        return showBox("authFeedback", "Sai mật khẩu tài khoản này.", false);
+    try {
+      const snap = await db.ref("nakan_shop_v2/users/" + k).get();
+      if (!snap.exists()) {
+        if (pass.length < 6) {
+          return showBox("authFeedback", "Tài khoản mới cần mật khẩu tối thiểu 6 ký tự.", false);
+        }
+        const newUser = { username: uname, password: pass, balance: 0 };
+        await db.ref("nakan_shop_v2/users/" + k).set(newUser);
+        state.usersMap[k] = newUser;
+        state.currentUsername = uname;
+      } else {
+        const existing = snap.val() || {};
+        if (existing.password && existing.password !== pass) {
+          return showBox("authFeedback", "Sai mật khẩu tài khoản này.", false);
+        }
+        state.usersMap[k] = existing;
+        state.currentUsername = existing.username || uname;
       }
-      state.currentUsername = existing.username || uname;
-    }
 
-    localStorage.setItem(SESSION_KEY, state.currentUsername);
-    enterApp();
+      localStorage.setItem(SESSION_KEY, state.currentUsername);
+      enterApp();
+    } catch (e) {
+      showBox("authFeedback", "Lỗi đăng nhập: " + (e && e.message ? e.message : e), false);
+    }
   }
 
   async function changePassword() {
