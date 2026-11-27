@@ -55,6 +55,7 @@
       </div>
     </div>
   </div>
+
   <div id="authBox" class="card">
     <h2>⚡ Đăng nhập / Đăng ký (Đồng bộ Realtime)</h2>
     <input id="userInput" type="text" placeholder="Nhập tên tài khoản (VD: Nakan hoặc khach1)..." />
@@ -106,6 +107,7 @@
       <button onclick="changePassword()">Xác Nhận Đổi Mật Khẩu</button>
       <div id="passFeedback" class="err"></div>
     </div>
+
     <div id="nakanPanel" class="card" style="display:none; border-color:#38bdf8;">
       <h2 style="color:#38bdf8;">🛠️ Nakan: Số Dư, Gói/Kho Key & Đơn Hàng</h2>
 
@@ -157,18 +159,17 @@
     </div>
   </div>
 </div>
-
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script>
   const FIREBASE_CONFIG = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyAQwqbinP1WWF8UosM8gRDYTzSYv39j-sU",
+    authDomain: "nakanshop-3057e.firebaseapp.com",
+    databaseURL: "https://nakanshop-3057e-default-rtdb.firebaseio.com",
+    projectId: "nakanshop-3057e",
+    storageBucket: "nakanshop-3057e.firebasestorage.app",
+    messagingSenderId: "368178211932",
+    appId: "1:368178211932:web:f24260ee17617bbab08a99"
   };
 
   let db = null;
@@ -308,7 +309,6 @@
       scheduleRender();
     });
   }
-
   function getBalance(uname = state.currentUsername) {
     const u = state.usersMap[normKey(uname)];
     return Number((u && u.balance) || 0);
@@ -429,7 +429,6 @@
   if (state.currentUsername && firebaseReady) {
     enterApp();
   }
-
   function updateBuyTotal() {
     const pkg = state.packages.find((x) => x.id === selectedPkgId);
     const qty = Math.max(1, Math.floor(Number(document.getElementById("buyQtyInput").value || 1)));
@@ -499,7 +498,6 @@
       showBox("buyFeedback", "Lỗi mua key: " + formatFirebaseError(e), false);
     }
   }
-
   async function adminAddMoney() {
     if (!firebaseReady || !db || !isNakan()) return;
     const rawTarget = document.getElementById("targetAccInput").value.trim();
@@ -669,7 +667,6 @@
       renderAdminOrders();
     }
   };
-
   async function adminAddPkg() {
     if (!firebaseReady || !db || !isNakan()) return;
     const name = document.getElementById("newPkgName").value.trim();
