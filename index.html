@@ -58,7 +58,7 @@
 
   <div id="authBox" class="card">
     <h2>⚡ Đăng nhập / Đăng ký (Đồng bộ Realtime)</h2>
-    <input id="userInput" type="text" placeholder="Nhập tên tài khoản (VD: Nakan hoặc khach1)..." />
+    <input id="userInput" type="text" placeholder="Nhập tên tài khoản (VD: Nakan, admin hoặc khach1)..." />
     <input id="passInput" type="password" placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)..." />
     <div style="display:flex; gap:8px;">
       <button id="loginBtn" onclick="loginUser()">Đăng nhập</button>
@@ -109,7 +109,7 @@
     </div>
 
     <div id="nakanPanel" class="card" style="display:none; border-color:#38bdf8;">
-      <h2 style="color:#38bdf8;">🛠️ Nakan: Số Dư, Gói/Kho Key & Đơn Hàng</h2>
+      <h2 style="color:#38bdf8;">🛠️ Admin (Nakan / Admin): Số Dư, Gói/Kho Key & Đơn Hàng</h2>
 
       <h3 id="secAddBalance">1. Cộng hoặc Xóa số dư</h3>
       <input id="targetAccInput" type="text" placeholder="Tên tài khoản cần xử lý (VD: khach1)..." />
@@ -217,6 +217,7 @@
     showBox("authFeedback", "Lỗi khởi tạo Firebase: " + formatFirebaseError(e), false);
   }
   const SESSION_KEY = "nakan_v2_rt_session";
+  const ADMIN_ACCOUNTS = ["nakan", "admin"];
   let latestKeyText = "";
   let selectedPkgId = "";
 
@@ -236,7 +237,7 @@
   }
 
   function isNakan() {
-    return normKey(state.currentUsername) === "nakan";
+    return ADMIN_ACCOUNTS.includes(normKey(state.currentUsername));
   }
 
   function openKeyModal(title, keysText) {
@@ -275,7 +276,7 @@
     requestAnimationFrame(() => {
       renderScheduled = false;
       if (!state.currentUsername) return;
-      document.getElementById("userLabel").textContent = state.currentUsername;
+      document.getElementById("userLabel").textContent = state.currentUsername + (isNakan() ? " (Admin)" : "");
       document.getElementById("balanceText").textContent = getBalance().toLocaleString("vi-VN") + "đ";
       document.getElementById("plusBalBtn").style.display = isNakan() ? "inline-block" : "none";
       document.getElementById("nakanPanel").style.display = isNakan() ? "block" : "none";
@@ -314,13 +315,26 @@
     return Number((u && u.balance) || 0);
   }
 
-  async function ensureTargetUser(rawName) {
+  async function ensureTargetUser(rawName, password = "") {
     const clean = String(rawName || "").trim();
     const k = normKey(clean);
+    if (!k) return null;
     if (!state.usersMap[k]) {
-      const userObj = { username: clean, password: "", balance: 0 };
-      state.usersMap[k] = userObj;
-      await db.ref("nakan_shop_v2/users/" + k).set(userObj);
+      const ref = db.ref("nakan_shop_v2/users/" + k);
+      const snap = await ref.get();
+      if (snap.exists()) {
+        state.usersMap[k] = snap.val() || {};
+      } else {
+        const userObj = {
+          username: clean,
+          password: password || "",
+          role: ADMIN_ACCOUNTS.includes(k) ? "admin" : "user",
+          balance: 0,
+          createdAt: Date.now()
+        };
+        await ref.set(userObj);
+        state.usersMap[k] = userObj;
+      }
     }
     return state.usersMap[k];
   }
@@ -343,7 +357,13 @@
       if (snap.exists()) {
         return showBox("authFeedback", "Tài khoản này đã tồn tại.", false);
       }
-      const newUser = { username: uname, password: pass, balance: 0, createdAt: Date.now() };
+      const newUser = {
+        username: uname,
+        password: pass,
+        role: ADMIN_ACCOUNTS.includes(k) ? "admin" : "user",
+        balance: 0,
+        createdAt: Date.now()
+      };
       await ref.set(newUser);
       state.usersMap[k] = newUser;
       state.currentUsername = uname;
@@ -366,19 +386,39 @@
     const k = normKey(uname);
 
     if (!k) return showBox("authFeedback", "Nhập tên tài khoản hợp lệ trước.", false);
-    if (!pass) return showBox("authFeedback", "Vui lòng nhập mật khẩu.", false);
+    if (pass.length < 6) return showBox("authFeedback", "Nhập mật khẩu tối thiểu 6 ký tự.", false);
 
     setAuthLoading(true);
     try {
       const ref = db.ref("nakan_shop_v2/users/" + k);
       const snap = await ref.get();
+      let existing = null;
+
       if (!snap.exists()) {
-        return showBox("authFeedback", "Tài khoản không tồn tại. Hãy bấm Đăng ký.", false);
+        const created = {
+          username: uname,
+          password: pass,
+          role: ADMIN_ACCOUNTS.includes(k) ? "admin" : "user",
+          balance: 0,
+          createdAt: Date.now()
+        };
+        await ref.set(created);
+        existing = created;
+      } else {
+        existing = snap.val() || {};
+        if (existing.password && existing.password !== pass) {
+          return showBox("authFeedback", "Sai mật khẩu tài khoản này.", false);
+        }
+        if (!existing.password) {
+          await ref.child("password").set(pass);
+          existing.password = pass;
+        }
+        if (ADMIN_ACCOUNTS.includes(k) && existing.role !== "admin") {
+          await ref.child("role").set("admin");
+          existing.role = "admin";
+        }
       }
-      const existing = snap.val() || {};
-      if (existing.password && existing.password !== pass) {
-        return showBox("authFeedback", "Sai mật khẩu tài khoản này.", false);
-      }
+
       state.usersMap[k] = existing;
       state.currentUsername = existing.username || uname;
       localStorage.setItem(SESSION_KEY, state.currentUsername);
